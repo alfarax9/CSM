@@ -1,0 +1,573 @@
+// Skema database CSM — sumber: docs/PRD-v2.md §10 (24 tabel).
+// Kolom pribadi (paspor, HP) disimpan terenkripsi pgcrypto (Bytes) + blind index HMAC.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Ekstensi pg_trgm & pgcrypto, CHECK serial, dan indeks trigram alamat dibuat di migrasi SQL awal.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enum ────────────────────────────────────────────────────────────
+
+enum Role {
+  super_admin
+  admin
+  sales
+}
+
+enum ContainerStatus {
+  draft
+  loading
+  locked
+  shipped
+  unloading
+  closed
+}
+
+enum ReceiptStatus {
+  captured
+  processing
+  needs_review
+  submitted
+  ready
+  approved
+  exported
+  rejected
+}
+
+enum ReceiptSource {
+  camera
+  pdf_import
+  excel_import
+}
+
+enum PackageType {
+  koper
+  karton
+  hambal
+  selimut
+  drum
+  kotak_besi
+  karung
+}
+
+enum ScanResult {
+  accepted
+  duplicate
+  serial_misread
+  unreadable
+  rejected_quality
+}
+
+enum DuplicateLayer {
+  sha256
+  phash
+  serial
+  db_constraint
+}
+
+enum ReceiptQuality {
+  valid
+  kurang_valid
+  tidak_valid
+}
+
+enum RunStatus {
+  queued
+  running
+  done
+  failed
+}
+
+enum ExportMode {
+  draft
+  final
+}
+
+enum ImportBatchStatus {
+  analyzing
+  preview
+  confirmed
+  cancelled
+}
+
+enum ExcelImportStatus {
+  validating
+  invalid_file
+  preview
+  committed
+  rolled_back
+}
+
+enum UnloadingSource {
+  excel
+  scan
+}
+
+enum WilayahLevel {
+  prov
+  kab
+  kec
+  desa
+}
+
+// ─── Pengguna dan akses ─────────────────────────────────────────────
+
+model User {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  email       String    @unique
+  googleSub   String?   @unique @map("google_sub")
+  avatarUrl   String?   @map("avatar_url")
+  role        Role
+  displayName String?   @map("display_name")
+  isActive    Boolean   @default(true) @map("is_active")
+  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  refreshTokens     RefreshToken[]
+  receiptsAsSales   Receipt[]      @relation("ReceiptSales")
+  receiptsApproved  Receipt[]      @relation("ReceiptApprovedBy")
+  receiptsAudited   Receipt[]      @relation("ReceiptAuditedBy")
+  containersCreated Container[]
+  salesRegions      SalesRegion[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model EmailWhitelist {
+  email     String   @id
+  note      String?
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("email_whitelist")
+}
+
+// ─── Container dan resi ─────────────────────────────────────────────
+
+model Container {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  seqNo       Int             @unique @map("seq_no")
+  boxNo       String?         @map("box_no")
+  loadingDate DateTime?       @map("loading_date") @db.Date
+  status      ContainerStatus @default(draft)
+  templateId  String?         @map("template_id") @db.Uuid
+  lockedAt    DateTime?       @map("locked_at") @db.Timestamptz
+  closedAt    DateTime?       @map("closed_at") @db.Timestamptz
+  purgeAt     DateTime?       @map("purge_at") @db.Timestamptz
+  purgedAt    DateTime?       @map("purged_at") @db.Timestamptz
+  createdBy   String          @map("created_by") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  creator          User               @relation(fields: [createdBy], references: [id])
+  template         ExcelTemplate?     @relation(fields: [templateId], references: [id])
+  receipts         Receipt[]          @relation("ReceiptContainer")
+  carriedReceipts  Receipt[]          @relation("ReceiptCarriedFrom")
+  scanAttempts     ScanAttempt[]
+  importBatches    ImportBatch[]
+  excelImports     ExcelImport[]
+  exports          Export[]
+  rowLocks         RowLock[]
+  unloadingRecords UnloadingRecord[]
+  reservations     SerialReservation[]
+
+  @@map("containers")
+}
+
+model Receipt {
+  id                     String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  containerId            String        @map("container_id") @db.Uuid
+  /// NULL hanya setelah "Bebaskan serial" pada resi yang di-soft-delete (CHECK di migrasi SQL)
+  serialNo               Int?          @unique @map("serial_no")
+  releasedSerialNo       Int?          @map("released_serial_no")
+  salesId                String        @map("sales_id") @db.Uuid
+  source                 ReceiptSource
+  importBatchId          String?       @map("import_batch_id") @db.Uuid
+  excelImportId          String?       @map("excel_import_id") @db.Uuid
+  receiptDate            DateTime?     @map("receipt_date") @db.Date
+  senderName             String?       @map("sender_name")
+  senderPhone            Bytes?        @map("sender_phone")
+  passportNo             Bytes?        @map("passport_no")
+  passportBidx           Bytes?        @map("passport_bidx")
+  recipientName          String?       @map("recipient_name")
+  address                String?
+  recipientPhone         Bytes?        @map("recipient_phone")
+  recipientPhoneBidx     Bytes?        @map("recipient_phone_bidx")
+  destCity               String?       @map("dest_city")
+  wilayahCode            String?       @map("wilayah_code")
+  koliTotal              Int?          @map("koli_total") @db.SmallInt
+  weightKg               Decimal?      @map("weight_kg") @db.Decimal(7, 2)
+  insurance              Decimal?      @db.Decimal(12, 2)
+  packing                Decimal?      @db.Decimal(12, 2)
+  vat                    Decimal?      @db.Decimal(12, 2)
+  grandTotal             Decimal?      @map("grand_total") @db.Decimal(12, 2)
+  cekNote                String?       @map("cek_note")
+  status                 ReceiptStatus @default(captured)
+  rejectReason           String?       @map("reject_reason")
+  carriedFromContainerId String?       @map("carried_from_container_id") @db.Uuid
+  submittedAt            DateTime?     @map("submitted_at") @db.Timestamptz
+  auditedBy              String?       @map("audited_by") @db.Uuid
+  auditedAt              DateTime?     @map("audited_at") @db.Timestamptz
+  approvedBy             String?       @map("approved_by") @db.Uuid
+  approvedAt             DateTime?     @map("approved_at") @db.Timestamptz
+  anonymizedAt           DateTime?     @map("anonymized_at") @db.Timestamptz
+  deletedAt              DateTime?     @map("deleted_at") @db.Timestamptz
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  container     Container      @relation("ReceiptContainer", fields: [containerId], references: [id])
+  carriedFrom   Container?     @relation("ReceiptCarriedFrom", fields: [carriedFromContainerId], references: [id])
+  sales         User           @relation("ReceiptSales", fields: [salesId], references: [id])
+  approver      User?          @relation("ReceiptApprovedBy", fields: [approvedBy], references: [id])
+  auditor       User?          @relation("ReceiptAuditedBy", fields: [auditedBy], references: [id])
+  importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
+  excelImport   ExcelImport?   @relation(fields: [excelImportId], references: [id])
+  wilayah       Wilayah?       @relation(fields: [wilayahCode], references: [code])
+  packages      ReceiptPackage[]
+  images        ReceiptImage[]
+  runs          ExtractionRun[]
+  rowLocks      RowLock[]
+
+  @@index([containerId, status])
+  @@index([containerId, passportBidx, recipientPhoneBidx])
+  @@map("receipts")
+}
+
+model ReceiptPackage {
+  receiptId   String      @map("receipt_id") @db.Uuid
+  packageType PackageType @map("package_type")
+  qty         Int         @db.SmallInt
+
+  receipt Receipt @relation(fields: [receiptId], references: [id])
+
+  @@id([receiptId, packageType])
+  @@map("receipt_packages")
+}
+
+model ReceiptImage {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  receiptId     String    @map("receipt_id") @db.Uuid
+  version       Int       @default(1)
+  /// NULL setelah file dihapus oleh job retensi (PRD §12)
+  filePath      String?   @map("file_path")
+  pageNo        Int?      @map("page_no")
+  sha256        String    @unique
+  phash         String?
+  width         Int?
+  height        Int?
+  blurScore     Float?    @map("blur_score")
+  replacedAt    DateTime? @map("replaced_at") @db.Timestamptz
+  retainForEval Boolean   @default(false) @map("retain_for_eval")
+  purgedAt      DateTime? @map("purged_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  receipt Receipt         @relation(fields: [receiptId], references: [id])
+  runs    ExtractionRun[]
+
+  @@unique([receiptId, version])
+  @@map("receipt_images")
+}
+
+model SerialReservation {
+  serialNo    Int      @id @map("serial_no")
+  userId      String   @map("user_id") @db.Uuid
+  containerId String   @map("container_id") @db.Uuid
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz
+
+  container Container @relation(fields: [containerId], references: [id])
+
+  @@map("serial_reservations")
+}
+
+model ScanAttempt {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId               String          @map("user_id") @db.Uuid
+  containerId          String          @map("container_id") @db.Uuid
+  source               ReceiptSource
+  importBatchId        String?         @map("import_batch_id") @db.Uuid
+  pageNo               Int?            @map("page_no")
+  serialRead           String?         @map("serial_read")
+  serialTyped          String?         @map("serial_typed")
+  result               ScanResult
+  duplicateOfReceiptId String?         @map("duplicate_of_receipt_id") @db.Uuid
+  duplicateLayer       DuplicateLayer? @map("duplicate_layer")
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  container Container @relation(fields: [containerId], references: [id])
+
+  @@index([containerId, result])
+  @@map("scan_attempts")
+}
+
+model ImportBatch {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  containerId String            @map("container_id") @db.Uuid
+  salesId     String            @map("sales_id") @db.Uuid
+  filePath    String?           @map("file_path")
+  sha256      String            @unique
+  pageCount   Int               @map("page_count")
+  status      ImportBatchStatus @default(analyzing)
+  summary     Json?
+  createdBy   String            @map("created_by") @db.Uuid
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  container Container @relation(fields: [containerId], references: [id])
+  receipts  Receipt[]
+
+  @@map("import_batches")
+}
+
+model ExcelImport {
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  containerId      String            @map("container_id") @db.Uuid
+  filePath         String?           @map("file_path")
+  sha256           String            @unique
+  templateId       String?           @map("template_id") @db.Uuid
+  templateVersion  Int?              @map("template_version")
+  detectedBy       String?           @map("detected_by")
+  status           ExcelImportStatus @default(validating)
+  rowsTotal        Int               @default(0) @map("rows_total")
+  rowsValid        Int               @default(0) @map("rows_valid")
+  rowsKurangValid  Int               @default(0) @map("rows_kurang_valid")
+  rowsTidakValid   Int               @default(0) @map("rows_tidak_valid")
+  rowsDuplicate    Int               @default(0) @map("rows_duplicate")
+  errors           Json?
+  createdBy        String            @map("created_by") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  committedAt      DateTime?         @map("committed_at") @db.Timestamptz
+  rolledBackAt     DateTime?         @map("rolled_back_at") @db.Timestamptz
+
+  container Container @relation(fields: [containerId], references: [id])
+  receipts  Receipt[]
+
+  @@map("excel_imports")
+}
+
+// ─── Model dan ekstraksi ────────────────────────────────────────────
+
+model ModelVersion {
+  id                  String    @id
+  hfModelId           String    @map("hf_model_id")
+  provider            String
+  promptVersion       String    @map("prompt_version")
+  evalAccuracy        Float?    @map("eval_accuracy")
+  evalNumericAccuracy Float?    @map("eval_numeric_accuracy")
+  isActive            Boolean   @default(false) @map("is_active")
+  activatedBy         String?   @map("activated_by") @db.Uuid
+  activatedAt         DateTime? @map("activated_at") @db.Timestamptz
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  runs ExtractionRun[]
+
+  @@map("model_versions")
+}
+
+model ExtractionRun {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  receiptId    String          @map("receipt_id") @db.Uuid
+  imageId      String          @map("image_id") @db.Uuid
+  modelVersion String          @map("model_version")
+  status       RunStatus       @default(queued)
+  quality      ReceiptQuality?
+  inputTokens  Int?            @map("input_tokens")
+  outputTokens Int?            @map("output_tokens")
+  costUsd      Decimal?        @map("cost_usd") @db.Decimal(10, 6)
+  startedAt    DateTime?       @map("started_at") @db.Timestamptz
+  finishedAt   DateTime?       @map("finished_at") @db.Timestamptz
+  error        String?
+
+  receipt Receipt          @relation(fields: [receiptId], references: [id])
+  image   ReceiptImage     @relation(fields: [imageId], references: [id])
+  model   ModelVersion     @relation(fields: [modelVersion], references: [id])
+  fields  ExtractedField[]
+
+  @@index([receiptId])
+  @@map("extraction_runs")
+}
+
+model ExtractedField {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId         String    @map("run_id") @db.Uuid
+  fieldKey      String    @map("field_key")
+  rawText       String?   @map("raw_text")
+  suggestedText String?   @map("suggested_text")
+  finalText     String?   @map("final_text")
+  confVlm       Float?    @map("conf_vlm")
+  confNlp       Float?    @map("conf_nlp")
+  confFinal     Float?    @map("conf_final")
+  bbox          Json?
+  reason        String?
+  correctedBy   String?   @map("corrected_by") @db.Uuid
+  correctedAt   DateTime? @map("corrected_at") @db.Timestamptz
+
+  run ExtractionRun @relation(fields: [runId], references: [id])
+
+  @@unique([runId, fieldKey])
+  @@map("extracted_fields")
+}
+
+model FieldThreshold {
+  fieldKey  String   @id @map("field_key")
+  greenMin  Float    @default(0.9) @map("green_min")
+  yellowMin Float    @default(0.7) @map("yellow_min")
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("field_thresholds")
+}
+
+/// Antrian job untuk Node dan Python: SELECT … FOR UPDATE SKIP LOCKED + LISTEN/NOTIFY (PRD §9)
+model Job {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type      String
+  payload   Json
+  status    RunStatus @default(queued)
+  priority  Int       @default(100)
+  attempts  Int       @default(0)
+  runAfter  DateTime  @default(now()) @map("run_after") @db.Timestamptz
+  lockedAt  DateTime? @map("locked_at") @db.Timestamptz
+  lastError String?   @map("last_error")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([status, runAfter, priority, createdAt])
+  @@map("jobs")
+}
+
+// ─── Master data, template, operasional ─────────────────────────────
+
+model Wilayah {
+  code       String       @id
+  name       String
+  level      WilayahLevel
+  parentCode String?      @map("parent_code")
+  shortName  String?      @map("short_name")
+
+  parent   Wilayah?        @relation("WilayahHierarchy", fields: [parentCode], references: [code])
+  children Wilayah[]       @relation("WilayahHierarchy")
+  aliases  WilayahAlias[]
+  receipts Receipt[]
+
+  @@index([parentCode])
+  @@map("wilayah")
+}
+
+model WilayahAlias {
+  alias       String   @id
+  wilayahCode String   @map("wilayah_code")
+  createdBy   String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  wilayah Wilayah @relation(fields: [wilayahCode], references: [code])
+
+  @@map("wilayah_aliases")
+}
+
+model SalesRegion {
+  salesId   String   @map("sales_id") @db.Uuid
+  region    String
+  validFrom DateTime @default(now()) @map("valid_from") @db.Date
+
+  sales User @relation(fields: [salesId], references: [id])
+
+  @@id([salesId, validFrom])
+  @@map("sales_region")
+}
+
+model ExcelTemplate {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  version   Int
+  filePath  String   @map("file_path")
+  mapping   Json
+  isActive  Boolean  @default(false) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  containers Container[]
+  exports    Export[]
+
+  @@unique([name, version])
+  @@map("excel_templates")
+}
+
+model Export {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  containerId String     @map("container_id") @db.Uuid
+  templateId  String     @map("template_id") @db.Uuid
+  mode        ExportMode
+  /// NULL setelah file dihapus oleh job retensi (PRD §12)
+  filePath    String?    @map("file_path")
+  rowCount    Int        @map("row_count")
+  totalPcs    Int        @map("total_pcs")
+  totalKg     Decimal    @map("total_kg") @db.Decimal(10, 2)
+  createdBy   String     @map("created_by") @db.Uuid
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  container Container     @relation(fields: [containerId], references: [id])
+  template  ExcelTemplate @relation(fields: [templateId], references: [id])
+
+  @@map("exports")
+}
+
+model RowLock {
+  containerId String   @map("container_id") @db.Uuid
+  receiptId   String   @id @map("receipt_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz
+
+  container Container @relation(fields: [containerId], references: [id])
+  receipt   Receipt   @relation(fields: [receiptId], references: [id])
+
+  @@map("row_locks")
+}
+
+model UnloadingRecord {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  containerId String          @map("container_id") @db.Uuid
+  serialNo    Int             @map("serial_no")
+  pcs         Int
+  kg          Decimal?        @db.Decimal(7, 2)
+  source      UnloadingSource
+  note        String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  container Container @relation(fields: [containerId], references: [id])
+
+  @@index([containerId, serialNo])
+  @@map("unloading_records")
+}
+
+/// Append-only (PRD §12). Nilai field pribadi diganti "[dianonimkan]" oleh job retensi.
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  actorId   String?  @map("actor_id") @db.Uuid
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  before    Json?
+  after     Json?
+  reason    String?
+  ip        String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
