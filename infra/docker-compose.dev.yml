@@ -1,0 +1,9 @@
+# Override khusus pengembangan di MacBook: buka Postgres ke localhost saja.
+# Network `internal` tidak bisa publish port, jadi db ditambah ke network `devhost`.
+services:
+  db:
+    ports: ["127.0.0.1:${DB_PORT:-5433}:5432"]
+    networks: [internal, devhost]
+
+networks:
+  devhost: {}

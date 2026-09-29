@@ -1,0 +1,14 @@
+# HTTPS otomatis (Let's Encrypt) untuk domain produksi. PRD §9 "Host VPS".
+# /api/* langsung ke Express (upload besar & SSE tidak lewat Next.js); sisanya ke Next.js.
+{$SITE_DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 110MB # PDF bulk maks 100 MB (PRD §12)
+	}
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

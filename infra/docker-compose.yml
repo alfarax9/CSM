@@ -1,0 +1,85 @@
+# Produksi (VPS) dan dasar pengembangan. Lihat docs/PRD-v2.md §9.
+#   Prod : docker compose -f infra/docker-compose.yml --profile prod up -d
+#   Dev  : npm run db:up   (memakai juga infra/docker-compose.dev.yml untuk membuka port DB ke localhost)
+name: csm
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-csm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-csm}
+      POSTGRES_DB: ${POSTGRES_DB:-csm}
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-csm}"]
+      interval: 5s
+      retries: 10
+    networks: [internal]
+
+  api:
+    profiles: [prod]
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-csm}:${POSTGRES_PASSWORD:-csm}@db:5432/${POSTGRES_DB:-csm}
+    depends_on: { db: { condition: service_healthy } }
+    volumes: ["uploads:/data/uploads"]
+    networks: [internal]
+
+  web:
+    profiles: [prod]
+    build: { context: .., dockerfile: apps/web/Dockerfile }
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    depends_on: [api]
+    networks: [internal]
+
+  ml:
+    profiles: [prod]
+    build: { context: .., dockerfile: services/ml/Dockerfile }
+    restart: unless-stopped
+    # HTTP internal: cek Serial No lokal (tanpa internet, tanpa HF_TOKEN).
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-csm}:${POSTGRES_PASSWORD:-csm}@db:5432/${POSTGRES_DB:-csm}
+    depends_on: { db: { condition: service_healthy } }
+    volumes: ["uploads:/data/uploads"]
+    networks: [internal]
+
+  # Worker ekstraksi: satu-satunya service yang memegang HF_TOKEN dan boleh keluar ke internet (PRD §6).
+  ml-worker:
+    profiles: [prod]
+    build: { context: .., dockerfile: services/ml/Dockerfile }
+    restart: unless-stopped
+    command: ["python", "-m", "csm_ml.worker"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-csm}:${POSTGRES_PASSWORD:-csm}@db:5432/${POSTGRES_DB:-csm}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_MODEL: ${HF_MODEL:-Qwen/Qwen3.5-397B-A17B}
+      HF_PROVIDER: ${HF_PROVIDER:-}
+    depends_on: { db: { condition: service_healthy } }
+    volumes: ["uploads:/data/uploads"]
+    networks: [internal, egress]
+
+  caddy:
+    profiles: [prod]
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "caddy_data:/data"]
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-localhost}
+    depends_on: [web]
+    networks: [internal, egress]
+
+networks:
+  internal: { internal: true } # db, api, web tidak punya akses internet
+  egress: {}                   # ml (ke Hugging Face) dan caddy (Let's Encrypt)
+
+volumes:
+  pgdata: {}
+  uploads: {}
+  caddy_data: {}
