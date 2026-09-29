@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+coverage/
+.env
+.env.*
+!.env.example
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+apps/api/src/generated/
+# Data resi asli (paspor, HP) tidak pernah masuk repo — lihat docs/PRD-v2.md §12
+data/
+samples/private/
+# Hasil Graphify dibuat ulang saat perlu
+graphify-out/
+graph.json
+graph.html
+GRAPH_REPORT.md
+.DS_Store
+
+# Pengaturan Claude Code per mesin (hook Graphify memakai path absolut)
+.claude/settings.local.json

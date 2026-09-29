@@ -1,0 +1,14 @@
+# Graphify: selalu jalankan dengan --code-only (AST lokal, tanpa LLM). Lihat README "Aturan data".
+# Pagar tambahan di atas .gitignore — data resi asli tidak boleh pernah diproses.
+data/
+samples/
+**/*.pdf
+**/*.xlsx
+**/*.xlsm
+**/*.jpg
+**/*.jpeg
+**/*.png
+**/*.heic
+.env
+.env.*
+apps/api/src/generated/
