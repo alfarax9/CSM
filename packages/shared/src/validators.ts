@@ -1,0 +1,53 @@
+/** Aturan format field (PRD §4, §6). */
+
+export const PASSPORT_PATTERN = /^[A-Z]{1,2}\d{6,7}$/;
+export const PHONE_PATTERN = /^08\d{8,11}$/;
+export const SERIAL_PATTERN = /^\d{4,5}$/;
+
+/** Normalisasi kesalahan baca klasik (O→0, I→1, S→5) — HANYA untuk field numerik. */
+export function normalizeNumeric(raw: string): string {
+  return raw
+    .toUpperCase()
+    .replace(/O/g, '0')
+    .replace(/I/g, '1')
+    .replace(/S/g, '5')
+    .replace(/[^0-9]/g, '');
+}
+
+/** "2 - PCS" → "2". Satuan dibuang dulu agar S di "PCS" tidak ikut menjadi 5. */
+export function parseCount(raw: string): string {
+  return normalizeNumeric(raw.replace(/\b(PCS|PC|KOLI|KG|KGS)\b/gi, ' '));
+}
+
+/** "C-8060823" → "C8060823". */
+export function normalizePassport(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+export function isValidPassport(value: string): boolean {
+  return PASSPORT_PATTERN.test(value);
+}
+
+/** Beberapa nomor dipisah spasi, seperti di template. Setiap nomor harus lolos pola. */
+export function normalizePhones(raw: string): string {
+  return raw
+    .split(/[\s/,;]+/)
+    .map(normalizeNumeric)
+    .filter((n) => n.length > 0)
+    .join(' ');
+}
+
+export function isValidPhones(value: string): boolean {
+  const parts = value.split(' ').filter(Boolean);
+  return parts.length > 0 && parts.every((p) => PHONE_PATTERN.test(p));
+}
+
+export function isValidSerial(value: string): boolean {
+  return SERIAL_PATTERN.test(value);
+}
+
+/** "145 - Kg" → 145. Mengembalikan null jika tidak ada angka. */
+export function parseWeightKg(raw: string): number | null {
+  const match = raw.replace(',', '.').match(/\d+(\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}

@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReceiptExtraction",
+  "description": "Output mentah VLM untuk satu resi. Nilai teks apa adanya dari kertas; null jika kosong atau tidak terbaca. Sumber kebenaran bersama untuk apps/api (Zod) dan services/ml (response_format).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "serial_no",
+    "receipt_date",
+    "sender_name",
+    "passport_no",
+    "sender_phone",
+    "recipient_name",
+    "address",
+    "recipient_phone",
+    "packages",
+    "koli_total",
+    "weight_kg",
+    "insurance",
+    "packing",
+    "vat",
+    "grand_total",
+    "corner_note"
+  ],
+  "properties": {
+    "serial_no": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "receipt_date": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sender_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "passport_no": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sender_phone": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "recipient_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "address": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "recipient_phone": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "packages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "koper",
+        "karton",
+        "hambal",
+        "selimut",
+        "drum",
+        "kotak_besi",
+        "karung"
+      ],
+      "properties": {
+        "koper": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "karton": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hambal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selimut": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "drum": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kotak_besi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "karung": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "koli_total": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "weight_kg": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "insurance": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "packing": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "vat": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "grand_total": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "corner_note": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
