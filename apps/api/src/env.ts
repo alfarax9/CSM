@@ -20,6 +20,8 @@ const EnvSchema = z
     GOOGLE_CLIENT_SECRET: z.string().default(''),
     ALLOWED_GOOGLE_DOMAINS: csv,
     JWT_SECRET: z.string().default(''),
+    /** Sementara: `password` (email + password). Kembali ke `google` sesuai PRD §3 sebelum go-live. */
+    AUTH_MODE: z.enum(['password', 'google']).default('password'),
   })
   .superRefine((env, ctx) => {
     // Di produksi rahasia sesi wajib kuat; di dev/test boleh kosong (diganti nilai sementara).

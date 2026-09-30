@@ -118,16 +118,18 @@ enum WilayahLevel {
 // ─── Pengguna dan akses ─────────────────────────────────────────────
 
 model User {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name        String
-  email       String    @unique
-  googleSub   String?   @unique @map("google_sub")
-  avatarUrl   String?   @map("avatar_url")
-  role        Role
-  displayName String?   @map("display_name")
-  isActive    Boolean   @default(true) @map("is_active")
-  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  email        String    @unique
+  googleSub    String?   @unique @map("google_sub")
+  /// Sementara (AUTH_MODE=password): hash scrypt, tidak pernah password asli.
+  passwordHash String?   @map("password_hash")
+  avatarUrl    String?   @map("avatar_url")
+  role         Role
+  displayName  String?   @map("display_name")
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   refreshTokens     RefreshToken[]
   receiptsAsSales   Receipt[]      @relation("ReceiptSales")
@@ -178,10 +180,10 @@ model Container {
   createdBy   String          @map("created_by") @db.Uuid
   createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
 
-  creator          User               @relation(fields: [createdBy], references: [id])
-  template         ExcelTemplate?     @relation(fields: [templateId], references: [id])
-  receipts         Receipt[]          @relation("ReceiptContainer")
-  carriedReceipts  Receipt[]          @relation("ReceiptCarriedFrom")
+  creator          User                @relation(fields: [createdBy], references: [id])
+  template         ExcelTemplate?      @relation(fields: [templateId], references: [id])
+  receipts         Receipt[]           @relation("ReceiptContainer")
+  carriedReceipts  Receipt[]           @relation("ReceiptCarriedFrom")
   scanAttempts     ScanAttempt[]
   importBatches    ImportBatch[]
   excelImports     ExcelImport[]
@@ -233,18 +235,18 @@ model Receipt {
   deletedAt              DateTime?     @map("deleted_at") @db.Timestamptz
   createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
-  container     Container      @relation("ReceiptContainer", fields: [containerId], references: [id])
-  carriedFrom   Container?     @relation("ReceiptCarriedFrom", fields: [carriedFromContainerId], references: [id])
-  sales         User           @relation("ReceiptSales", fields: [salesId], references: [id])
-  approver      User?          @relation("ReceiptApprovedBy", fields: [approvedBy], references: [id])
-  auditor       User?          @relation("ReceiptAuditedBy", fields: [auditedBy], references: [id])
-  importBatch   ImportBatch?   @relation(fields: [importBatchId], references: [id])
-  excelImport   ExcelImport?   @relation(fields: [excelImportId], references: [id])
-  wilayah       Wilayah?       @relation(fields: [wilayahCode], references: [code])
-  packages      ReceiptPackage[]
-  images        ReceiptImage[]
-  runs          ExtractionRun[]
-  rowLocks      RowLock[]
+  container   Container        @relation("ReceiptContainer", fields: [containerId], references: [id])
+  carriedFrom Container?       @relation("ReceiptCarriedFrom", fields: [carriedFromContainerId], references: [id])
+  sales       User             @relation("ReceiptSales", fields: [salesId], references: [id])
+  approver    User?            @relation("ReceiptApprovedBy", fields: [approvedBy], references: [id])
+  auditor     User?            @relation("ReceiptAuditedBy", fields: [auditedBy], references: [id])
+  importBatch ImportBatch?     @relation(fields: [importBatchId], references: [id])
+  excelImport ExcelImport?     @relation(fields: [excelImportId], references: [id])
+  wilayah     Wilayah?         @relation(fields: [wilayahCode], references: [code])
+  packages    ReceiptPackage[]
+  images      ReceiptImage[]
+  runs        ExtractionRun[]
+  rowLocks    RowLock[]
 
   @@index([containerId, status])
   @@index([containerId, passportBidx, recipientPhoneBidx])
@@ -336,24 +338,24 @@ model ImportBatch {
 }
 
 model ExcelImport {
-  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  containerId      String            @map("container_id") @db.Uuid
-  filePath         String?           @map("file_path")
-  sha256           String            @unique
-  templateId       String?           @map("template_id") @db.Uuid
-  templateVersion  Int?              @map("template_version")
-  detectedBy       String?           @map("detected_by")
-  status           ExcelImportStatus @default(validating)
-  rowsTotal        Int               @default(0) @map("rows_total")
-  rowsValid        Int               @default(0) @map("rows_valid")
-  rowsKurangValid  Int               @default(0) @map("rows_kurang_valid")
-  rowsTidakValid   Int               @default(0) @map("rows_tidak_valid")
-  rowsDuplicate    Int               @default(0) @map("rows_duplicate")
-  errors           Json?
-  createdBy        String            @map("created_by") @db.Uuid
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  committedAt      DateTime?         @map("committed_at") @db.Timestamptz
-  rolledBackAt     DateTime?         @map("rolled_back_at") @db.Timestamptz
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  containerId     String            @map("container_id") @db.Uuid
+  filePath        String?           @map("file_path")
+  sha256          String            @unique
+  templateId      String?           @map("template_id") @db.Uuid
+  templateVersion Int?              @map("template_version")
+  detectedBy      String?           @map("detected_by")
+  status          ExcelImportStatus @default(validating)
+  rowsTotal       Int               @default(0) @map("rows_total")
+  rowsValid       Int               @default(0) @map("rows_valid")
+  rowsKurangValid Int               @default(0) @map("rows_kurang_valid")
+  rowsTidakValid  Int               @default(0) @map("rows_tidak_valid")
+  rowsDuplicate   Int               @default(0) @map("rows_duplicate")
+  errors          Json?
+  createdBy       String            @map("created_by") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  committedAt     DateTime?         @map("committed_at") @db.Timestamptz
+  rolledBackAt    DateTime?         @map("rolled_back_at") @db.Timestamptz
 
   container Container @relation(fields: [containerId], references: [id])
   receipts  Receipt[]
@@ -460,8 +462,8 @@ model Wilayah {
   parentCode String?      @map("parent_code")
   shortName  String?      @map("short_name")
 
-  parent   Wilayah?        @relation("WilayahHierarchy", fields: [parentCode], references: [code])
-  children Wilayah[]       @relation("WilayahHierarchy")
+  parent   Wilayah?       @relation("WilayahHierarchy", fields: [parentCode], references: [code])
+  children Wilayah[]      @relation("WilayahHierarchy")
   aliases  WilayahAlias[]
   receipts Receipt[]
 
