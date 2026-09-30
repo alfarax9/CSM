@@ -8,6 +8,17 @@ Spesifikasi: docs/PRD-v2.md. Bahasa UI, pesan error, dan komentar kode: Bahasa I
   yang mengirim isi file ke LLM. Simpan di luar repo; `data/` dan `samples/` sudah di-ignore.
 - `HF_TOKEN` hanya untuk services/ml (`ml-worker`). Jangan pernah di env Next.js atau kode browser.
 
+## Login (sementara)
+
+- `AUTH_MODE=password`: login email + password, hanya hash scrypt yang disimpan. Akun awal dari `SEED_*` di `.env`
+  (`npm run users:seed -w @csm/api`, otomatis di `npm run local`). Jangan pernah menulis kredensial di file repo.
+- Sebelum deploy online: kembali ke `AUTH_MODE=google` (PRD §3) atau pakai password kuat.
+
+## Git
+
+- Commit hanya atas nama pemilik repo (alfarax9). Jangan tambahkan trailer `Co-Authored-By` apa pun, termasuk Claude.
+- Push/force push hanya jika diminta.
+
 ## Perintah
 
 - `npm run local` (semua service + DB + migrasi + gazetteer) · `npm run typecheck && npm test` · `npm run ml:test`

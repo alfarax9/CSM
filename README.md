@@ -32,7 +32,10 @@ web (:3000), api (:4000), ml (:8000), dan worker sekaligus. Buka http://localhos
 | `npm run local -- --reset` | Hapus database lokal dulu lalu mulai dari nol |
 | `npm run db:down` | Matikan database setelah selesai |
 
-Akun pertama untuk login Google: `npm run user:create -w @csm/api -- --email ... --name ... --role super_admin`
+Login sementara memakai **email + password** (`AUTH_MODE=password`). Isi `SEED_SUPER_ADMIN_*` dan `SEED_ADMIN_*`
+di `.env` lokal; `npm run local` membuat akunnya otomatis. Kredensial tidak pernah ditulis di file repo.
+
+Akun pertama untuk login Google (`AUTH_MODE=google`): `npm run user:create -w @csm/api -- --email ... --name ... --role super_admin`
 (email Gmail otomatis masuk whitelist). Status Fase 0 dan data yang perlu disiapkan: [docs/FASE-0.md](docs/FASE-0.md).
 
 ## Test

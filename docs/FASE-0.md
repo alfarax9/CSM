@@ -20,6 +20,12 @@ Temuan selama pengerjaan (sudah diperbaiki):
 - "2 - PCS" terbaca 35 karena aturan S→5 — sekarang satuan dibuang dulu (`parseCount` / `parse_count`).
 - ExcelJS tidak memperlebar formula total saat baris disisipkan — eksportir wajib menulis ulang rentang `SUM` sendiri.
 
+## Penyimpangan sementara dari PRD
+
+- **Login email + password** (`AUTH_MODE=password`) menggantikan login Google untuk sementara, atas permintaan pemilik.
+  Password disimpan sebagai hash scrypt; akun awal dari `SEED_*` di `.env` lokal. Kode login Google tetap ada dan aktif
+  kembali dengan `AUTH_MODE=google`. **Wajib diganti sebelum website di-deploy online.**
+
 ## Yang Anda siapkan
 
 Simpan semua data asli di **luar repo**, mis. `~/csm-data/`. Jangan taruh di `/Users/mac/CSM`.
@@ -75,5 +81,6 @@ npm run wilayah:import -w @csm/api
 
 ## Belum dikerjakan (fase berikutnya)
 
-- Fase 1: halaman admin user, container, scan kamera + fast path serial, pipeline ekstraksi, review split, ekspor draft/final.
+- Fase 1 — sudah: kelola user (F8a) dan container + siklus status (F4), sesi web (halaman terlindungi, perpanjangan otomatis, keluar).
+- Fase 1 — belum: scan kamera + fast path serial, pipeline ekstraksi, review split, ekspor draft/final.
 - Fase 3: skrip backup harian, job retensi 30 hari, monitoring uptime.

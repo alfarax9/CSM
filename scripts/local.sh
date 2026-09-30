@@ -62,6 +62,11 @@ if [ "${WILAYAH:-0}" = "0" ]; then
   npm run wilayah:import -w @csm/api --silent
 fi
 
+if [ -n "${SEED_SUPER_ADMIN_EMAIL:-}${SEED_ADMIN_EMAIL:-}" ]; then
+  step "Akun awal (SEED_* di .env)"
+  npm run users:seed -w @csm/api --silent
+fi
+
 NAMES="api,web"
 COLORS="blue,green"
 CMDS=("npm run dev -w @csm/api" "npm run dev -w @csm/web")
