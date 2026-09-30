@@ -3,6 +3,8 @@
 export const PASSPORT_PATTERN = /^[A-Z]{1,2}\d{6,7}$/;
 export const PHONE_PATTERN = /^08\d{8,11}$/;
 export const SERIAL_PATTERN = /^\d{4,5}$/;
+/** Nomor container ISO 6346: 4 huruf + 7 digit, mis. "TXGU 7181980". */
+export const BOX_NO_PATTERN = /^[A-Z]{4} \d{7}$/;
 
 /** Normalisasi kesalahan baca klasik (O→0, I→1, S→5) — HANYA untuk field numerik. */
 export function normalizeNumeric(raw: string): string {
@@ -50,4 +52,10 @@ export function isValidSerial(value: string): boolean {
 export function parseWeightKg(raw: string): number | null {
   const match = raw.replace(',', '.').match(/\d+(\.\d+)?/);
   return match ? Number(match[0]) : null;
+}
+
+/** "txgu7181980" → "TXGU 7181980". */
+export function normalizeBoxNo(raw: string): string {
+  const compact = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return compact.length === 11 ? `${compact.slice(0, 4)} ${compact.slice(4)}` : raw.trim().toUpperCase();
 }

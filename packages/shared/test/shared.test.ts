@@ -4,7 +4,11 @@ import {
   FIELD_KEYS,
   PACKAGE_TYPES,
   ReceiptExtractionSchema,
+  BOX_NO_PATTERN,
+  canTransitionContainer,
   canTransitionReceipt,
+  isContainerUnlock,
+  normalizeBoxNo,
   combineConfidence,
   confidenceBand,
   containerAllowsFinalExport,
@@ -71,6 +75,18 @@ describe('status (PRD §7)', () => {
   it('resi rejected kembali lewat Ganti foto, bukan scan baru', () => {
     expect(canTransitionReceipt('rejected', 'processing')).toBe(true);
     expect(canTransitionReceipt('rejected', 'approved')).toBe(false);
+  });
+
+  it('siklus container maju satu langkah, unlock hanya Locked → Loading', () => {
+    expect(canTransitionContainer('draft', 'loading')).toBe(true);
+    expect(canTransitionContainer('draft', 'locked')).toBe(false);
+    expect(canTransitionContainer('closed', 'unloading')).toBe(false);
+    expect(isContainerUnlock('locked', 'loading')).toBe(true);
+  });
+
+  it('menormalisasi nomor box container', () => {
+    expect(normalizeBoxNo('txgu7181980')).toBe('TXGU 7181980');
+    expect(BOX_NO_PATTERN.test(normalizeBoxNo('TXGU-7181980'))).toBe(true);
   });
 
   it('ekspor final hanya setelah lock', () => {
