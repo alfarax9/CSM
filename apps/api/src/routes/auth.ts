@@ -1,4 +1,5 @@
 import { type CookieOptions, type Request, type Response, Router } from 'express';
+import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import type { Role } from '@csm/shared';
 import { audit } from '../audit.js';
@@ -18,6 +19,7 @@ import {
   signFlow,
   verifyFlow,
 } from '../auth/tokens.js';
+import { dummyHash, verifyPassword } from '../auth/password.js';
 import { AppError } from '../http/errors.js';
 import { requireRole } from '../http/rbac.js';
 
@@ -66,7 +68,35 @@ export function createAuthRouter({ prisma, google, env }: AuthDeps): Router {
     res.clearCookie(COOKIE.csrf, { ...base, httpOnly: false });
   }
 
+  /** Mode login aktif; dipakai halaman login untuk memilih form. */
+  router.get('/auth/mode', (_req, res) => {
+    res.json({ mode: env.AUTH_MODE });
+  });
+
+  // Login email + password — SEMENTARA, hanya saat AUTH_MODE=password.
+  const LoginSchema = z.object({ email: z.string().trim().toLowerCase(), password: z.string().min(1).max(200) });
+  router.post('/auth/login', limiter, async (req, res) => {
+    if (env.AUTH_MODE !== 'password') throw new AppError('FORBIDDEN', 'Login password dinonaktifkan. Gunakan Masuk dengan Google.');
+    const { email, password } = LoginSchema.parse(req.body);
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Selalu jalankan verifikasi (hash tiruan jika email tidak ada) agar waktu respons tidak membocorkan email terdaftar.
+    const valid = await verifyPassword(password, user?.passwordHash ?? (await dummyHash()));
+    if (!user || !user.passwordHash || !valid) {
+      await audit(prisma, { action: 'login.denied', entity: 'auth', after: { email }, reason: 'password_invalid', ip: req.ip });
+      throw new AppError('UNAUTHENTICATED', 'Email atau password salah.');
+    }
+    if (!user.isActive) {
+      await audit(prisma, { action: 'login.denied', entity: 'auth', after: { email }, reason: 'inactive', ip: req.ip });
+      throw new AppError('FORBIDDEN', 'Akun Anda sedang dinonaktifkan. Hubungi Admin.');
+    }
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    await startSession(res, user.id, user.role, user.displayName);
+    await audit(prisma, { actorId: user.id, action: 'login.success', entity: 'user', entityId: user.id, reason: 'password', ip: req.ip });
+    res.json({ ok: true, redirect: homeFor(user.role) });
+  });
+
   router.get('/auth/google', limiter, async (_req, res) => {
+    if (env.AUTH_MODE !== 'google') return res.redirect(redirectTo('/login'));
     if (!env.GOOGLE_CLIENT_ID) return res.redirect(redirectTo('/login?error=not_configured'));
     const flow = { state: randomToken(), nonce: randomToken(), verifier: randomToken(48) };
     res.cookie(COOKIE.flow, await signFlow(flow, env.JWT_SECRET), {
@@ -127,6 +157,25 @@ export function createAuthRouter({ prisma, google, env }: AuthDeps): Router {
     await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
     await startSession(res, row.user.id, row.user.role, row.user.displayName);
     res.json({ ok: true });
+  });
+
+  /**
+   * Perpanjang sesi lewat navigasi browser (dipakai middleware web saat access token habis),
+   * lalu kembali ke halaman asal. `next` hanya boleh path relatif di aplikasi ini.
+   */
+  router.get('/auth/renew', limiter, async (req, res) => {
+    const next = typeof req.query.next === 'string' && /^\/(?!\/)/.test(req.query.next) ? req.query.next : '/containers';
+    const token = req.cookies?.[COOKIE.refresh] as string | undefined;
+    const row = token
+      ? await prisma.refreshToken.findUnique({ where: { tokenHash: sha256(token) }, include: { user: true } })
+      : null;
+    if (!row || row.revokedAt || row.expiresAt < new Date() || !row.user.isActive) {
+      clearSession(res);
+      return res.redirect(redirectTo('/login'));
+    }
+    await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
+    await startSession(res, row.user.id, row.user.role, row.user.displayName);
+    return res.redirect(redirectTo(next));
   });
 
   router.post('/auth/logout', async (req, res) => {

@@ -8,7 +8,7 @@ import { loadEnv } from '../src/env.js';
 
 const HAS_DB = Boolean(process.env.DATABASE_URL);
 const DOMAIN = 'uji.csm.test';
-const env = loadEnv({ ...process.env, NODE_ENV: 'test', PUBLIC_URL: 'http://localhost:3000', ALLOWED_GOOGLE_DOMAINS: DOMAIN, GOOGLE_CLIENT_ID: 'uji' });
+const env = loadEnv({ ...process.env, NODE_ENV: 'test', PUBLIC_URL: 'http://localhost:3000', ALLOWED_GOOGLE_DOMAINS: DOMAIN, GOOGLE_CLIENT_ID: 'uji', AUTH_MODE: 'google' });
 
 /** Google tiruan: kode → klaim; memeriksa nonce seperti gateway asli. */
 function fakeGoogle(byCode: Record<string, GoogleClaims & { nonce?: string }>): GoogleGateway & { lastNonce?: string } {
@@ -118,6 +118,17 @@ describe.skipIf(!HAS_DB)('login Google', () => {
   it('state yang tidak cocok ditolak', async () => {
     const res = await login(request.agent(app()), 'admin', 'state-palsu');
     expect(res.headers.location).toBe('http://localhost:3000/login?error=failed');
+  });
+
+  it('renew memperpanjang sesi dan hanya mengarahkan ke path internal', async () => {
+    const agent = request.agent(app());
+    await login(agent, 'admin');
+    const ok = await agent.get('/api/v1/auth/renew?next=/admin/users');
+    expect(ok.headers.location).toBe('http://localhost:3000/admin/users');
+    const evil = await agent.get('/api/v1/auth/renew?next=//evil.example');
+    expect(evil.headers.location).toBe('http://localhost:3000/containers');
+    const anon = await request(app()).get('/api/v1/auth/renew?next=/admin/users');
+    expect(anon.headers.location).toBe('http://localhost:3000/login');
   });
 
   it('refresh merotasi token dan butuh CSRF; logout mencabut sesi', async () => {
