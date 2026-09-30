@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: csm, POSTGRES_PASSWORD: csm, POSTGRES_DB: csm }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U csm" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://csm:csm@localhost:5432/csm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run prisma:migrate -w @csm/api
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  ml:
+    runs-on: ubuntu-latest
+    needs: node # butuh tabel jobs; migrasi dijalankan ulang di bawah
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: csm, POSTGRES_PASSWORD: csm, POSTGRES_DB: csm }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U csm" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://csm:csm@localhost:5432/csm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run prisma:migrate -w @csm/api
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+        working-directory: services/ml
+      - run: uv run ruff check . && uv run pytest
+        working-directory: services/ml
