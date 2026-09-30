@@ -8,3 +8,9 @@ export const ASSIGNABLE_ROLES: Record<Role, readonly Role[]> = {
   admin: ['admin', 'sales'],
   sales: [],
 };
+
+export const ROLE_LABEL: Record<Role, string> = {
+  super_admin: 'Super Admin',
+  admin: 'Admin',
+  sales: 'Sales',
+};
