@@ -8,7 +8,9 @@ import { googleRedirectUri, loadEnv, type Env } from './env.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { errorHandler, notFound } from './http/errors.js';
 import { createAuthRouter } from './routes/auth.js';
+import { createContainersRouter } from './routes/containers.js';
 import { healthRouter } from './routes/health.js';
+import { createUsersRouter } from './routes/users.js';
 
 export interface AppDeps {
   env?: Env;
@@ -39,6 +41,8 @@ export function createApp(deps: AppDeps = {}): Express {
         hostedDomain: env.ALLOWED_GOOGLE_DOMAINS.length === 1 ? env.ALLOWED_GOOGLE_DOMAINS[0] : undefined,
       });
     v1.use(createAuthRouter({ prisma: deps.prisma, google, env }));
+    v1.use(createUsersRouter(deps.prisma));
+    v1.use(createContainersRouter(deps.prisma));
   }
   app.use('/api/v1', v1);
 
