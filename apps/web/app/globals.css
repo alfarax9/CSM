@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+
+/* Design token — docs/PRD-v2.md §8. Hijau = struktur & aksi primer; good/neutral/bad = status. */
+@theme {
+  --color-green-800: #0a4524;
+  --color-green-700: #185c37;
+  --color-green-600: #107c41;
+  --color-green-400: #33c481;
+  --color-green-50: #e9f5ee;
+  --color-ink: #1f1f1f;
+  --color-ink-muted: #5e5e5e;
+  --color-grid: #d6d6d6;
+  --color-canvas: #f3f3f3;
+  --color-surface: #ffffff;
+  --color-good: #c6efce;
+  --color-good-ink: #006100;
+  --color-neutral: #ffeb9c;
+  --color-neutral-ink: #9c5700;
+  --color-bad: #ffc7ce;
+  --color-bad-ink: #9c0006;
+
+  --font-sans: 'Selawik', 'Segoe UI', system-ui, sans-serif;
+
+  --text-meta: 12px;
+  --text-cell: 13px;
+  --text-body: 14px;
+  --text-panel: 16px;
+  --text-page: 20px;
+
+  --radius-cell: 2px;
+  --radius-button: 4px;
+  --radius-dialog: 8px;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  color: var(--color-ink);
+  background: var(--color-canvas);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-green-600);
+  outline-offset: 1px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
