@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { CONTAINER_STATUS_LABEL, type ContainerStatus } from '@csm/shared';
 import { Grid, Pill, td, th } from '@/components/ui';
 import { apiGet, getMe } from '@/lib/api';
@@ -49,7 +50,11 @@ export default async function ContainersPage() {
         >
           {containers.map((c) => (
             <tr key={c.id} className="hover:bg-green-50">
-              <td className={`${td} num font-semibold`}>{c.seqNo}</td>
+              <td className={`${td} num font-semibold`}>
+                <Link href={`/containers/${c.id}`} className="text-green-800 hover:underline">
+                  {c.seqNo}
+                </Link>
+              </td>
               <td className={td}>{c.boxNo ?? '–'}</td>
               <td className={td}>{fmtDate(c.loadingDate)}</td>
               <td className={td}>
