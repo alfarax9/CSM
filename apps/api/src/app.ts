@@ -7,8 +7,12 @@ import { db } from './db.js';
 import { googleRedirectUri, loadEnv, type Env } from './env.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { errorHandler, notFound } from './http/errors.js';
+import { createPii } from './pii.js';
+import { createImageStore } from './storage/images.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createContainersRouter } from './routes/containers.js';
+import { createInsightsRouter } from './routes/insights.js';
+import { createReceiptsRouter } from './routes/receipts.js';
 import { healthRouter } from './routes/health.js';
 import { createUsersRouter } from './routes/users.js';
 
@@ -43,6 +47,14 @@ export function createApp(deps: AppDeps = {}): Express {
     v1.use(createAuthRouter({ prisma: deps.prisma, google, env }));
     v1.use(createUsersRouter(deps.prisma));
     v1.use(createContainersRouter(deps.prisma));
+    v1.use(createInsightsRouter(deps.prisma));
+    v1.use(
+      createReceiptsRouter(
+        deps.prisma,
+        createPii(env.PII_ENCRYPTION_KEY, env.PII_BIDX_KEY),
+        createImageStore(env.UPLOADS_DIR, env.JWT_SECRET),
+      ),
+    );
   }
   app.use('/api/v1', v1);
 
