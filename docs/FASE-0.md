@@ -82,5 +82,8 @@ npm run wilayah:import -w @csm/api
 ## Belum dikerjakan (fase berikutnya)
 
 - Fase 1 — sudah: kelola user (F8a) dan container + siklus status (F4), sesi web (halaman terlindungi, perpanjangan otomatis, keluar).
-- Fase 1 — belum: scan kamera + fast path serial, pipeline ekstraksi, review split, ekspor draft/final.
+- Fase 1 — sudah: input resi manual per container (sheet Laporan Loading), deteksi Serial No ganda (F7, lapis serial
+  + constraint DB), Tujuan dari gazetteer, enkripsi paspor/HP (AES-256-GCM + blind index HMAC), alur kirim/approve/tolak, pindah resi antar container (Plus 1), rekap per sales (tab Rekap Sales, pengganti PVT Loading), halaman Audit (F8d; kategori sementara dari aturan
+  validasi data, nanti digabung confidence VLM), dan Statistik scan (F8b: resi unik per container/sales/hari, duplikat terpisah).
+- Fase 1 — belum: scan kamera + fast path serial, pipeline ekstraksi VLM (mengisi form yang sama), review split, ekspor draft/final.
 - Fase 3: skrip backup harian, job retensi 30 hari, monitoring uptime.
