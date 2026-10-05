@@ -9,7 +9,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const staff = me.role !== 'sales';
   const nav = [
     { href: '/containers', label: 'Container' },
-    ...(staff ? [{ href: '/admin/users', label: 'Kelola user' }] : []),
+    ...(staff
+      ? [
+          { href: '/audit', label: 'Audit' },
+          { href: '/stats', label: 'Statistik' },
+          { href: '/admin/users', label: 'Kelola user' },
+        ]
+      : []),
   ];
 
   return (
