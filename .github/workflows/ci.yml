@@ -21,6 +21,8 @@ jobs:
         with: { node-version: 24, cache: npm }
       - run: npm ci
       - run: npm run prisma:migrate -w @csm/api
+      # Test resi memakai gazetteer wilayah (Tujuan, autocomplete); sama seperti setup database baru.
+      - run: npm run wilayah:import -w @csm/api
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
