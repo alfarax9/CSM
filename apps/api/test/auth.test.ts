@@ -7,7 +7,7 @@ import { db } from '../src/db.js';
 import { loadEnv } from '../src/env.js';
 
 const HAS_DB = Boolean(process.env.DATABASE_URL);
-const DOMAIN = 'uji.csm.test';
+const DOMAIN = 'auth.csm.test';
 const env = loadEnv({ ...process.env, NODE_ENV: 'test', PUBLIC_URL: 'http://localhost:3000', ALLOWED_GOOGLE_DOMAINS: DOMAIN, GOOGLE_CLIENT_ID: 'uji', AUTH_MODE: 'google' });
 
 /** Google tiruan: kode → klaim; memeriksa nonce seperti gateway asli. */
