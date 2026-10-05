@@ -5,6 +5,8 @@ import {
   PACKAGE_TYPES,
   ReceiptExtractionSchema,
   BOX_NO_PATTERN,
+  auditCategory,
+  auditIssues,
   canTransitionContainer,
   canTransitionReceipt,
   isContainerUnlock,
@@ -104,5 +106,26 @@ describe('schema ekstraksi', () => {
     expect(json.required).toEqual([...FIELD_KEYS]);
     expect(Object.keys(ReceiptExtractionSchema.shape)).toEqual([...FIELD_KEYS]);
     expect(json.properties.packages.required).toEqual([...PACKAGE_TYPES]);
+  });
+});
+
+describe('audit (PRD F8d, aturan sementara)', () => {
+  const lengkap = {
+    koliTotal: 1, pcs: 1, weightKg: 20, destCity: 'Bandung', hasPassport: true, hasRecipientPhone: true,
+    address: 'Kp. Wanasuka', senderName: 'Hanipah Bt Ade', recipientName: 'Ibu Yayah',
+  };
+
+  it('resi lengkap valid', () => {
+    expect(auditCategory(auditIssues(lengkap))).toBe('valid');
+  });
+
+  it('koli tidak cocok → tidak valid', () => {
+    const issues = auditIssues({ ...lengkap, koliTotal: 3, pcs: 2 });
+    expect(auditCategory(issues)).toBe('tidak_valid');
+    expect(issues[0]?.message).toContain('koli di kertas 3');
+  });
+
+  it('tujuan kosong saja → kurang valid', () => {
+    expect(auditCategory(auditIssues({ ...lengkap, destCity: null }))).toBe('kurang_valid');
   });
 });
