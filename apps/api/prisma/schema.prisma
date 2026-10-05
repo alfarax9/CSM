@@ -43,6 +43,7 @@ enum ReceiptSource {
   camera
   pdf_import
   excel_import
+  manual
 }
 
 enum PackageType {
@@ -135,6 +136,7 @@ model User {
   receiptsAsSales   Receipt[]      @relation("ReceiptSales")
   receiptsApproved  Receipt[]      @relation("ReceiptApprovedBy")
   receiptsAudited   Receipt[]      @relation("ReceiptAuditedBy")
+  receiptsCreated   Receipt[]      @relation("ReceiptCreatedBy")
   containersCreated Container[]
   salesRegions      SalesRegion[]
 
@@ -233,9 +235,11 @@ model Receipt {
   approvedAt             DateTime?     @map("approved_at") @db.Timestamptz
   anonymizedAt           DateTime?     @map("anonymized_at") @db.Timestamptz
   deletedAt              DateTime?     @map("deleted_at") @db.Timestamptz
+  createdBy              String?       @map("created_by") @db.Uuid
   createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
   container   Container        @relation("ReceiptContainer", fields: [containerId], references: [id])
+  creator     User?            @relation("ReceiptCreatedBy", fields: [createdBy], references: [id])
   carriedFrom Container?       @relation("ReceiptCarriedFrom", fields: [carriedFromContainerId], references: [id])
   sales       User             @relation("ReceiptSales", fields: [salesId], references: [id])
   approver    User?            @relation("ReceiptApprovedBy", fields: [approvedBy], references: [id])
@@ -250,6 +254,7 @@ model Receipt {
 
   @@index([containerId, status])
   @@index([containerId, passportBidx, recipientPhoneBidx])
+  @@index([address(ops: raw("gin_trgm_ops"))], type: Gin, map: "receipts_address_trgm_idx")
   @@map("receipts")
 }
 
@@ -468,6 +473,7 @@ model Wilayah {
   receipts Receipt[]
 
   @@index([parentCode])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "wilayah_name_trgm_idx")
   @@map("wilayah")
 }
 
