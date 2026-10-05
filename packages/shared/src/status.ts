@@ -20,7 +20,20 @@ export const RECEIPT_TRANSITIONS: Record<ReceiptStatus, readonly ReceiptStatus[]
   ready: ['approved', 'rejected'],
   approved: ['exported'],
   exported: ['approved'],
-  rejected: ['processing'],
+  // processing = Ganti foto (resi scan); ready/submitted = diperbaiki lalu dikirim ulang (resi manual).
+  rejected: ['processing', 'ready', 'submitted'],
+};
+
+/** Label status resi untuk UI; kata kerja lampau (PRD §8 "Status pill"). */
+export const RECEIPT_STATUS_LABEL: Record<ReceiptStatus, string> = {
+  captured: 'Diterima',
+  processing: 'Diproses',
+  needs_review: 'Perlu review',
+  submitted: 'Dikirim ke Admin',
+  ready: 'Siap approve',
+  approved: 'Approved',
+  exported: 'Diekspor',
+  rejected: 'Ditolak',
 };
 
 export function canTransitionReceipt(from: ReceiptStatus, to: ReceiptStatus): boolean {
