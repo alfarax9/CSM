@@ -24,6 +24,7 @@ services:
     restart: unless-stopped
     env_file: ../.env
     environment:
+      UPLOADS_DIR: /data/uploads
       DATABASE_URL: postgresql://${POSTGRES_USER:-csm}:${POSTGRES_PASSWORD:-csm}@db:5432/${POSTGRES_DB:-csm}
     depends_on: { db: { condition: service_healthy } }
     volumes: ["uploads:/data/uploads"]
