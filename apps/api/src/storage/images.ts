@@ -77,10 +77,39 @@ export function createImageStore(root: string, secret: string) {
       return full;
     },
 
+    /** Foto identik yang masih menunggu di antrean (belum jadi resi), untuk cek duplikat lapis 1. */
+    async findTempBySha(sha256: string): Promise<TempMeta | null> {
+      const files = await readdir(tmpDir).catch(() => [] as string[]);
+      for (const f of files) {
+        if (!f.endsWith('.json') || f.endsWith('.extract.json')) continue;
+        const raw = await readFile(path.join(tmpDir, f), 'utf8').catch(() => null);
+        const meta = raw ? (JSON.parse(raw) as TempMeta) : null;
+        if (meta?.sha256 === sha256) return meta;
+      }
+      return null;
+    },
+
     async loadTemp(token: string): Promise<TempMeta | null> {
       if (!tokenOk(token)) return null;
       const raw = await readFile(path.join(tmpDir, `${token}.json`), 'utf8').catch(() => null);
       return raw ? (JSON.parse(raw) as TempMeta) : null;
+    },
+
+    async readTemp(token: string): Promise<Buffer | null> {
+      if (!tokenOk(token)) return null;
+      return readFile(path.join(tmpDir, `${token}.jpg`)).catch(() => null);
+    },
+
+    /** Hasil baca model untuk foto sementara; dipakai saat resi disimpan (data latih, PRD §6). */
+    async saveExtraction(token: string, extraction: unknown) {
+      if (!tokenOk(token)) return;
+      await writeFile(path.join(tmpDir, `${token}.extract.json`), JSON.stringify(extraction), { mode: 0o600 });
+    },
+
+    async loadExtraction<T>(token: string): Promise<T | null> {
+      if (!tokenOk(token)) return null;
+      const raw = await readFile(path.join(tmpDir, `${token}.extract.json`), 'utf8').catch(() => null);
+      return raw ? (JSON.parse(raw) as T) : null;
     },
 
     /** Pindahkan foto sementara ke folder resi; kembalikan path relatif untuk receipt_images.file_path. */
@@ -89,7 +118,13 @@ export function createImageStore(root: string, secret: string) {
       const rel = path.join('receipts', `${randomUUID()}.jpg`);
       await rename(path.join(tmpDir, `${token}.jpg`), path.join(root, rel));
       await rm(path.join(tmpDir, `${token}.json`), { force: true });
+      await rm(path.join(tmpDir, `${token}.extract.json`), { force: true });
       return rel;
+    },
+
+    async discardTemp(token: string) {
+      if (!tokenOk(token)) return;
+      await Promise.all(['jpg', 'json', 'extract.json'].map((ext) => rm(path.join(tmpDir, `${token}.${ext}`), { force: true })));
     },
 
     /** Simpan foto langsung ke folder resi (dipakai Ganti foto). */
