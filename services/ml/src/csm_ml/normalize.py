@@ -16,12 +16,13 @@ def normalize_numeric(raw: str) -> str:
     return re.sub(r"[^0-9]", "", raw.upper().translate(_NUMERIC_FIX))
 
 
-_UNIT_RE = re.compile(r"\b(PCS|PC|KOLI|KG|KGS)\b", re.IGNORECASE)
-
-
 def parse_count(raw: str) -> str:
-    """ "2 - PCS" → "2". Satuan dibuang dulu agar S di "PCS" tidak ikut menjadi 5."""
-    return normalize_numeric(_UNIT_RE.sub(" ", raw))
+    """
+    "2 - PCS" / "2pcs" / "1-POS." → angka pertama. Satuan tulisan tangan sering terbaca aneh (DCS, POS, DOG),
+    jadi huruf setelah angka diabaikan; O→0 hanya dipakai jika tidak ada digit sama sekali ("O" → "0").
+    """
+    m = re.search(r"\d+", raw)
+    return m.group(0) if m else normalize_numeric(raw)
 
 
 def normalize_passport(raw: str) -> str:
@@ -29,8 +30,24 @@ def normalize_passport(raw: str) -> str:
 
 
 def normalize_phones(raw: str) -> str:
-    parts = (normalize_numeric(p) for p in re.split(r"[\s/,;]+", raw))
-    return " ".join(p for p in parts if p)
+    """
+    Beberapa nomor dipisah spasi. Nomor yang ditulis berkelompok ("0857 7575 5299", "081931 332153")
+    digabung dulu: kelompok baru dianggap nomor baru hanya jika diawali 0 dan nomor sebelumnya sudah ≥ 10 digit.
+    """
+    numbers: list[str] = []
+    for group in re.split(r"[/,;\n]+", raw):
+        cur = ""
+        for chunk in (normalize_numeric(c) for c in group.split()):
+            if not chunk:
+                continue
+            if len(cur) >= 10 and chunk.startswith("0"):
+                numbers.append(cur)
+                cur = chunk
+            else:
+                cur += chunk
+        if cur:
+            numbers.append(cur)
+    return " ".join(numbers)
 
 
 def parse_weight_kg(raw: str) -> float | None:

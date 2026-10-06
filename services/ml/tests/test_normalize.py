@@ -13,6 +13,9 @@ def test_contoh_prd_resi_35616():
     assert normalize_passport("E - 4499 715") == "E4499715"
     assert PASSPORT_RE.match("E4499715")
     assert normalize_phones("085524446728 / 085213038585") == "085524446728 085213038585"
+    assert normalize_phones("0857 7575 5299") == "085775755299"
+    assert normalize_phones("081931 332153 087896565665") == "081931332153 087896565665"
+    assert normalize_phones("085 231 731 665.") == "085231731665"
     assert parse_weight_kg("20 - Kg") == 20
 
 
@@ -34,5 +37,6 @@ def test_rr_jadi_rt():
 
 def test_satuan_pcs_tidak_jadi_angka_5():
     assert parse_count("2 - PCS") == "2"
+    assert parse_count("2pcs") == "2" and parse_count("1-POS.") == "1" and parse_count("4 - DOG.") == "4"
     assert parse_count("1 - Koli") == "1"
     assert parse_count("O") == "0"
