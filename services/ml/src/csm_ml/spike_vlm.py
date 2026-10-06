@@ -30,7 +30,7 @@ from typing import Any
 from rapidfuzz.distance import Levenshtein
 
 from .config import load_settings
-from .hf_client import image_data_url, make_client
+from .hf_client import image_data_url, make_client, parse_reply
 from .normalize import normalize_numeric, normalize_passport, normalize_phones, parse_count, parse_weight_kg
 
 INSTRUCTION = "Baca resi ini dan isi semua field sesuai schema."
@@ -278,7 +278,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         t0 = time.perf_counter()
         try:
             resp = client.chat.completions.create(**_request(settings, img))
-            read = json.loads(resp.choices[0].message.content)
+            read = parse_reply(resp.choices[0].message.content)
         except Exception as exc:  # noqa: BLE001 — setiap kegagalan dicatat, spike tetap lanjut
             result.failed += 1
             raw.append({"image": img.name, "error": f"{type(exc).__name__}: {exc}"})
