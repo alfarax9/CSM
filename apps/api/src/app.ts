@@ -9,6 +9,7 @@ import type { PrismaClient } from './generated/prisma/client.js';
 import { errorHandler, notFound } from './http/errors.js';
 import { createPii } from './pii.js';
 import { createImageStore } from './storage/images.js';
+import { type Extractor, createMlExtractor } from './ml.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createContainersRouter } from './routes/containers.js';
 import { createInsightsRouter } from './routes/insights.js';
@@ -21,6 +22,8 @@ export interface AppDeps {
   /** Tanpa prisma, hanya rute yang tidak butuh database yang aktif (mis. /health di test unit). */
   prisma?: PrismaClient;
   google?: GoogleGateway;
+  /** Pembaca resi (VLM lewat service ml); diganti tiruan di test. */
+  extractor?: Extractor;
 }
 
 export function createApp(deps: AppDeps = {}): Express {
@@ -53,6 +56,7 @@ export function createApp(deps: AppDeps = {}): Express {
         deps.prisma,
         createPii(env.PII_ENCRYPTION_KEY, env.PII_BIDX_KEY),
         createImageStore(env.UPLOADS_DIR, env.JWT_SECRET),
+        deps.extractor ?? createMlExtractor(env.ML_URL),
       ),
     );
   }
