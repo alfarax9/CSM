@@ -36,7 +36,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<Ap
 }
 
 /** Aksi dari browser ke API; pesan error diambil dari format error seragam API. */
-export function apiSend<T = unknown>(method: 'POST' | 'PATCH', path: string, body?: unknown) {
+export function apiSend<T = unknown>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown) {
   return call<T>(method, path, body);
 }
 
