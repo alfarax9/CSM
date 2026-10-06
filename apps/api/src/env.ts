@@ -26,6 +26,8 @@ const EnvSchema = z
     PII_ENCRYPTION_KEY: z.string().default(''),
     PII_BIDX_KEY: z.string().default(''),
     /** Folder foto resi (PRD §9 volume `uploads`). Dev: data/uploads di root repo (sudah di-.gitignore). */
+    /** Service ml internal (baca resi). Tidak pernah diekspos ke browser. */
+    ML_URL: z.string().default('http://localhost:8000'),
     UPLOADS_DIR: z.string().default(new URL('../../../data/uploads', import.meta.url).pathname),
   })
   .superRefine((env, ctx) => {
