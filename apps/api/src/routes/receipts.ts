@@ -9,6 +9,7 @@ import {
   containerAcceptsReceipts,
   isValidPassport,
   isValidPhones,
+  normalizeNumeric,
   normalizePassport,
   normalizePhones,
 } from '@csm/shared';
@@ -17,6 +18,7 @@ import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../http/errors.js';
 import { requireRole } from '../http/rbac.js';
 import { type Pii, maskValue } from '../pii.js';
+import { type Extraction, type Extractor, ExtractorError } from '../ml.js';
 import { type ImageStore, MAX_IMAGE_BYTES, jpegSize, sha256Hex } from '../storage/images.js';
 
 const ANY = requireRole('super_admin', 'admin', 'sales');
@@ -50,11 +52,20 @@ const phones = z
   .nullable()
   .optional();
 
+/** HP pengirim: nomor negara asal (mis. Arab Saudi 0560356139), 9–15 digit; bukan pola 08 Indonesia. */
+const senderPhone = z
+  .string()
+  .transform((v) => normalizeNumeric(v))
+  .refine((v) => v === '' || (v.length >= 9 && v.length <= 15), 'No HP pengirim harus 9–15 digit.')
+  .transform((v) => v || null)
+  .nullable()
+  .optional();
+
 const FieldsSchema = z.object({
   serialNo: z.coerce.number().int().min(1000, 'Serial No 4–5 digit.').max(99999, 'Serial No 4–5 digit.'),
   receiptDate: z.iso.date().nullable().optional(),
   senderName: optText,
-  senderPhone: phones,
+  senderPhone,
   passportNo: passport,
   recipientName: optText,
   recipientPhone: phones,
@@ -92,7 +103,7 @@ function warningsFor(koliTotal: number | null | undefined, pcs: number): string[
 }
 
 /** Resi input manual + deteksi Serial No ganda (PRD F7) + alur submit/approve/reject. */
-export function createReceiptsRouter(prisma: PrismaClient, pii: Pii, images: ImageStore): Router {
+export function createReceiptsRouter(prisma: PrismaClient, pii: Pii, images: ImageStore, extractor: Extractor): Router {
   const router = Router();
 
   /** Lokasi resi yang sudah memakai Serial No (termasuk yang di-soft-delete, PRD F7). */
@@ -268,6 +279,58 @@ export function createReceiptsRouter(prisma: PrismaClient, pii: Pii, images: Ima
     return typeof err === 'object' && err !== null && 'code' in err && (err as { code: string }).code === 'P2002';
   }
 
+  /**
+   * Simpan hasil baca model + nilai final dari manusia (PRD §10 extraction_runs / extracted_fields).
+   * `final_text ≠ raw_text` = label koreksi untuk evaluasi & perbaikan model. Nilai pribadi ikut dianonimkan
+   * oleh job retensi 30 hari setelah container Closed (PRD §12).
+   */
+  async function recordExtraction(
+    tx: Prisma.TransactionClient,
+    receiptId: string,
+    imageId: string,
+    extraction: Extraction,
+    input: z.infer<typeof CreateSchema>,
+  ) {
+    await tx.modelVersion.upsert({
+      where: { id: extraction.model },
+      update: {},
+      create: {
+        id: extraction.model,
+        hfModelId: extraction.model.split(':')[0]!,
+        provider: extraction.model.split(':')[1] ?? 'auto',
+        promptVersion: 'v1',
+      },
+    });
+    const levels = Object.values(extraction.fields).map((f) => f.level);
+    const run = await tx.extractionRun.create({
+      data: {
+        receiptId,
+        imageId,
+        modelVersion: extraction.model,
+        status: 'done',
+        // Kategori dari hasil model SEBELUM dikoreksi manusia (PRD F9a). Tanpa skor confidence per field,
+        // field terbaca dianggap "perlu dicek" → kurang valid; gagal validasi → tidak valid.
+        quality: levels.includes('bad') ? 'tidak_valid' : 'kurang_valid',
+        inputTokens: extraction.inputTokens,
+        outputTokens: extraction.outputTokens,
+        startedAt: new Date(Date.now() - extraction.seconds * 1000),
+        finishedAt: new Date(),
+      },
+    });
+    const text = (v: unknown) => (v === null || v === undefined ? null : typeof v === 'object' ? JSON.stringify(v) : String(v));
+    const finalOf = (key: string) => text((input as Record<string, unknown>)[key]);
+    await tx.extractedField.createMany({
+      data: Object.entries(extraction.fields).map(([key, f]) => ({
+        runId: run.id,
+        fieldKey: key,
+        rawText: text(f.raw),
+        suggestedText: text(f.value),
+        finalText: finalOf(key),
+        reason: f.reason,
+      })),
+    });
+  }
+
   /** PRD F7 lapis 1: foto identik (sha256 sama) ditolak dan dicatat sebagai percobaan duplikat. */
   async function assertPhotoFree(sha256: string, userId: string, containerId: string) {
     const existing = await prisma.receiptImage.findUnique({ where: { sha256 }, include: { receipt: { include: { container: true } } } });
@@ -321,6 +384,21 @@ export function createReceiptsRouter(prisma: PrismaClient, pii: Pii, images: Ima
     const size = readJpeg(req.body);
     const sha256 = sha256Hex(req.body as Buffer);
     await assertPhotoFree(sha256, actor.id, container.id);
+    // Foto yang sama persis masih menunggu di antrean (belum disimpan jadi resi). Milik user yang sama = sedang
+    // mengulang (mis. halaman sempat ditutup) → antrean lama dibuang; milik user lain → ditolak.
+    const pending = await images.findTempBySha(sha256);
+    if (pending && pending.userId === actor.id) await images.discardTemp(pending.token);
+    else if (pending) {
+      await prisma.scanAttempt.create({
+        data: { userId: actor.id, containerId: container.id, source: 'camera', result: 'duplicate', duplicateLayer: 'sha256' },
+      });
+      throw new AppError('PHOTO_DUPLICATE', 'Foto yang sama persis sudah ada di antrean scan dan sedang menunggu dicek.', {
+        receiptId: null,
+        serialNo: null,
+        containerSeqNo: container.seqNo,
+        pending: true,
+      });
+    }
     const temp = await images.saveTemp(req.body as Buffer, {
       sha256,
       ...size,
@@ -331,33 +409,115 @@ export function createReceiptsRouter(prisma: PrismaClient, pii: Pii, images: Ima
     res.status(201).json({ token: temp.token, width: temp.width, height: temp.height });
   });
 
-  /** Ganti foto resi: versi baru, versi lama tetap disimpan sampai batas retensi (PRD F7 "Ganti foto"). */
-  router.post('/receipts/:id/image', ANY, rawJpeg, async (req, res) => {
+  /**
+   * Baca otomatis foto hasil scan dengan VLM (PRD §6). Hasilnya hanya SARAN untuk mengisi form;
+   * tetap dicek manusia. Disimpan sementara agar saat resi disimpan menjadi data latih (extracted_fields).
+   */
+  router.post('/containers/:id/scans/:token/extract', ANY, async (req, res) => {
     const actor = req.user!;
-    const r = await loadReceipt(String(req.params.id), actor);
+    const token = String(req.params.token);
+    const temp = await images.loadTemp(token);
+    if (!temp || temp.userId !== actor.id || temp.containerId !== String(req.params.id)) {
+      throw new AppError('NOT_FOUND', 'Foto scan tidak ditemukan atau kedaluwarsa. Scan ulang resinya.');
+    }
+    const jpeg = await images.readTemp(token);
+    if (!jpeg) throw new AppError('NOT_FOUND', 'File foto scan tidak ditemukan. Scan ulang resinya.');
+    let extraction: Extraction;
+    try {
+      extraction = await extractor(jpeg);
+    } catch (err) {
+      if (err instanceof ExtractorError) {
+        throw new AppError(err.unavailable ? 'EXTRACTION_UNAVAILABLE' : 'EXTRACTION_FAILED', `${err.message} Isi form secara manual.`);
+      }
+      throw err;
+    }
+    await images.saveExtraction(token, extraction);
+
+    // PRD F7 lapis 3: Serial No hasil baca sudah ada → blokir di kamera, catat sebagai percobaan duplikat.
+    const serialRead = String(extraction.fields.serialNo?.value ?? '');
+    const duplicate = /^\d{4,5}$/.test(serialRead) ? await findDuplicate(Number(serialRead)) : null;
+    if (duplicate) {
+      await prisma.scanAttempt.create({
+        data: {
+          userId: actor.id,
+          containerId: temp.containerId,
+          source: 'camera',
+          serialRead,
+          result: 'duplicate',
+          duplicateOfReceiptId: duplicate.receiptId,
+          duplicateLayer: 'serial',
+        },
+      });
+    }
+    res.json({ model: extraction.model, seconds: extraction.seconds, fields: extraction.fields, duplicate });
+  });
+
+  /** "Lewati" (PRD F7): buang foto sementara tanpa membuat resi. */
+  router.delete('/containers/:id/scans/:token', ANY, async (req, res) => {
+    const temp = await images.loadTemp(String(req.params.token));
+    if (!temp || temp.userId !== req.user!.id || temp.containerId !== String(req.params.id)) {
+      throw new AppError('NOT_FOUND', 'Foto scan tidak ditemukan.');
+    }
+    await images.discardTemp(temp.token);
+    res.json({ ok: true });
+  });
+
+  /** Resi yang fotonya boleh diganti oleh user ini (container belum berangkat; Sales hanya sebelum approve). */
+  async function loadReplaceable(id: string, actor: NonNullable<Express.Request['user']>) {
+    const r = await loadReceipt(id, actor);
     if (!EDITABLE_CONTAINER.has(r.container.status)) {
       throw new AppError('CONTAINER_CLOSED', `Container ${r.container.seqNo} sudah ${r.container.status}; foto tidak bisa diganti.`);
     }
     if (actor.role === 'sales' && (r.status === 'approved' || r.status === 'exported')) {
       throw new AppError('FORBIDDEN', 'Foto resi yang sudah di-approve hanya bisa diganti Admin.');
     }
-    const size = readJpeg(req.body);
-    const sha256 = sha256Hex(req.body as Buffer);
-    await assertPhotoFree(sha256, actor.id, r.containerId);
-    const rel = await images.saveReceiptImage(req.body as Buffer);
+    return r;
+  }
+
+  /** Simpan foto sebagai versi baru; versi lama ditandai diganti tapi tetap disimpan sampai retensi (PRD F7). */
+  async function addImageVersion(
+    r: Awaited<ReturnType<typeof loadReceipt>>,
+    rel: string,
+    meta: { sha256: string; width: number; height: number; blurScore: number | null },
+    actorId: string,
+    ip: string | undefined,
+  ) {
     const version = (r.images[0]?.version ?? 0) + 1;
     try {
       await prisma.$transaction(async (tx) => {
         if (r.images[0]) await tx.receiptImage.update({ where: { id: r.images[0].id }, data: { replacedAt: new Date() } });
-        await tx.receiptImage.create({
-          data: { receiptId: r.id, version, filePath: rel, sha256, ...size, blurScore: blurHeader(req.get('x-blur-score')) },
-        });
+        await tx.receiptImage.create({ data: { receiptId: r.id, version, filePath: rel, ...meta } });
       });
     } catch (err) {
       await images.remove(rel);
       throw err;
     }
-    await audit(prisma, { actorId: actor.id, action: 'receipt.image', entity: 'receipt', entityId: r.id, after: { version }, ip: req.ip });
+    await audit(prisma, { actorId, action: 'receipt.image', entity: 'receipt', entityId: r.id, after: { version }, ip: ip ?? null });
+  }
+
+  /** Ganti foto resi dari file/kamera di halaman detail resi. */
+  router.post('/receipts/:id/image', ANY, rawJpeg, async (req, res) => {
+    const actor = req.user!;
+    const r = await loadReplaceable(String(req.params.id), actor);
+    const size = readJpeg(req.body);
+    const sha256 = sha256Hex(req.body as Buffer);
+    await assertPhotoFree(sha256, actor.id, r.containerId);
+    const rel = await images.saveReceiptImage(req.body as Buffer);
+    await addImageVersion(r, rel, { sha256, ...size, blurScore: blurHeader(req.get('x-blur-score')) }, actor.id, req.ip);
+    res.status(201).json(toDetail(await loadReceipt(r.id, actor)));
+  });
+
+  /** "Ganti foto resi lama" dari panel duplikat di kamera (PRD F7): foto scan baru menjadi foto resi lama. */
+  const FromScanSchema = z.object({ token: z.uuid() });
+  router.post('/receipts/:id/image-from-scan', ANY, async (req, res) => {
+    const actor = req.user!;
+    const { token } = FromScanSchema.parse(req.body);
+    const r = await loadReplaceable(String(req.params.id), actor);
+    const temp = await images.loadTemp(token);
+    if (!temp || temp.userId !== actor.id) throw new AppError('NOT_FOUND', 'Foto scan tidak ditemukan atau kedaluwarsa.');
+    await assertPhotoFree(temp.sha256, actor.id, r.containerId);
+    const rel = await images.commitTemp(token);
+    await addImageVersion(r, rel, { sha256: temp.sha256, width: temp.width, height: temp.height, blurScore: temp.blurScore }, actor.id, req.ip);
     res.status(201).json(toDetail(await loadReceipt(r.id, actor)));
   });
 
@@ -470,6 +630,7 @@ export function createReceiptsRouter(prisma: PrismaClient, pii: Pii, images: Ima
       throw new AppError('VALIDATION_FAILED', 'Foto scan tidak ditemukan atau kedaluwarsa. Scan ulang resinya.');
     }
     if (temp) await assertPhotoFree(temp.sha256, actor.id, container.id);
+    const extraction = temp ? await images.loadExtraction<Extraction>(temp.token) : null;
     const imagePath = temp ? await images.commitTemp(temp.token) : null;
     const source = temp ? 'camera' : 'manual';
 
@@ -491,7 +652,7 @@ export function createReceiptsRouter(prisma: PrismaClient, pii: Pii, images: Ima
         });
         await writePackages(tx, r.id, input.packages as Packages | undefined);
         if (temp && imagePath) {
-          await tx.receiptImage.create({
+          const image = await tx.receiptImage.create({
             data: {
               receiptId: r.id,
               version: 1,
@@ -503,8 +664,16 @@ export function createReceiptsRouter(prisma: PrismaClient, pii: Pii, images: Ima
             },
           });
           await tx.scanAttempt.create({
-            data: { userId: actor.id, containerId: container.id, source: 'camera', serialTyped: String(input.serialNo), result: 'accepted' },
+            data: {
+              userId: actor.id,
+              containerId: container.id,
+              source: 'camera',
+              serialRead: extraction?.fields.serialNo ? String(extraction.fields.serialNo.value) : null,
+              serialTyped: String(input.serialNo),
+              result: 'accepted',
+            },
           });
+          if (extraction) await recordExtraction(tx, r.id, image.id, extraction, input);
         }
         return r.id;
       });
