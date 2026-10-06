@@ -20,8 +20,8 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
         </Link>
       </div>
       <p className="text-meta text-ink-muted">
-        Baca otomatis dari foto belum aktif: Serial No dan field lain diketik dari foto untuk sementara. Foto tetap tersimpan sebagai
-        bukti dan untuk pengecekan Admin.
+        Setelah foto diambil, isi resi dibaca otomatis lalu form terisi. Hasil mesin bisa salah: cocokkan setiap field berwarna
+        dengan kertas sebelum menyimpan. Foto dikirim ke penyedia model (tanpa nama sales/ID resi) hanya untuk dibaca.
       </p>
       <ScanWorkspace containerId={id} staff={staff} sales={sales} />
     </div>
