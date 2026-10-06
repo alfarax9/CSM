@@ -13,8 +13,8 @@ export const QUALITY_LIMITS = {
   blurMin: 60,
   /** Rata-rata kecerahan minimum (0–255). */
   brightnessMin: 70,
-  /** Porsi piksel yang nyaris putih murni; di atas ini dianggap silau. */
-  glareMax: 0.08,
+  /** Porsi piksel terbakar (nilai 254–255); di atas ini dianggap silau. Kertas putih biasa tidak sampai terbakar. */
+  glareMax: 0.12,
 };
 
 export interface PhotoQuality {
@@ -59,7 +59,7 @@ function measure(canvas: HTMLCanvasElement): PhotoQuality {
     const g = 0.299 * data[i * 4]! + 0.587 * data[i * 4 + 1]! + 0.114 * data[i * 4 + 2]!;
     gray[i] = g;
     sum += g;
-    if (g > 250) glare++;
+    if (g >= 254) glare++;
   }
 
   let lapSum = 0;
