@@ -85,5 +85,12 @@ npm run wilayah:import -w @csm/api
 - Fase 1 — sudah: input resi manual per container (sheet Laporan Loading), deteksi Serial No ganda (F7, lapis serial
   + constraint DB), Tujuan dari gazetteer, enkripsi paspor/HP (AES-256-GCM + blind index HMAC), alur kirim/approve/tolak, pindah resi antar container (Plus 1), rekap per sales (tab Rekap Sales, pengganti PVT Loading), halaman Audit (F8d; kategori sementara dari aturan
   validasi data, nanti digabung confidence VLM), dan Statistik scan (F8b: resi unik per container/sales/hari, duplikat terpisah).
-- Fase 1 — belum: scan kamera + fast path serial, pipeline ekstraksi VLM (mengisi form yang sama), review split, ekspor draft/final.
+- Fase 1 — sudah: scan kamera/upload foto (cek kualitas, foto identik ditolak, URL bertanda tangan), baca otomatis dengan
+  Qwen3.5-397B-A17B lewat Hugging Face (penyedia OVHcloud, Eropa) yang mengisi form + warna per field, data latih
+  (extraction_runs/extracted_fields), tampilan split foto | form.
+- F1 Scan kamera — selesai: kamera + bingkai A5, ambil otomatis saat kertas stabil 0,6 dtk, cek kualitas, mode batch
+  (antrean, baca di latar belakang, penghitung), upload banyak foto, duplikat foto (sesi, antrean, tersimpan) & Serial No
+  (panel merah + getar + bunyi, Buka resi lama / Ganti foto resi lama / Serial salah baca / Lewati). Mode offline dihapus.
+- Fase 1 — belum: fast path Serial No lokal (cek duplikat sebelum baca penuh), uji akurasi pada resi asli, ekspor draft/final.
+- Panduan uji: docs/QC.md.
 - Fase 3: skrip backup harian, job retensi 30 hari, monitoring uptime.
