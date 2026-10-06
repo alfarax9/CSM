@@ -25,6 +25,7 @@ services:
     env_file: ../.env
     environment:
       UPLOADS_DIR: /data/uploads
+      ML_URL: http://ml:8000
       DATABASE_URL: postgresql://${POSTGRES_USER:-csm}:${POSTGRES_PASSWORD:-csm}@db:5432/${POSTGRES_DB:-csm}
     depends_on: { db: { condition: service_healthy } }
     volumes: ["uploads:/data/uploads"]
@@ -43,14 +44,20 @@ services:
     profiles: [prod]
     build: { context: .., dockerfile: services/ml/Dockerfile }
     restart: unless-stopped
-    # HTTP internal: cek Serial No lokal (tanpa internet, tanpa HF_TOKEN).
+    # HTTP internal: baca resi dari foto (VLM di Hugging Face) + cek Serial No. Pemegang HF_TOKEN (PRD §6).
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-csm}:${POSTGRES_PASSWORD:-csm}@db:5432/${POSTGRES_DB:-csm}
+      VLM_API: ${VLM_API:-openrouter}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen3.7-flash}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_MODEL: ${HF_MODEL:-Qwen/Qwen3.5-397B-A17B}
+      HF_PROVIDER: ${HF_PROVIDER:-ovhcloud}
     depends_on: { db: { condition: service_healthy } }
     volumes: ["uploads:/data/uploads"]
-    networks: [internal]
+    networks: [internal, egress]
 
-  # Worker ekstraksi: satu-satunya service yang memegang HF_TOKEN dan boleh keluar ke internet (PRD §6).
+  # Worker ekstraksi (antrian, untuk import PDF bulk): juga memegang HF_TOKEN dan boleh keluar ke internet.
   ml-worker:
     profiles: [prod]
     build: { context: .., dockerfile: services/ml/Dockerfile }
@@ -58,9 +65,12 @@ services:
     command: ["python", "-m", "csm_ml.worker"]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-csm}:${POSTGRES_PASSWORD:-csm}@db:5432/${POSTGRES_DB:-csm}
+      VLM_API: ${VLM_API:-openrouter}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen3.7-flash}
       HF_TOKEN: ${HF_TOKEN:-}
       HF_MODEL: ${HF_MODEL:-Qwen/Qwen3.5-397B-A17B}
-      HF_PROVIDER: ${HF_PROVIDER:-}
+      HF_PROVIDER: ${HF_PROVIDER:-ovhcloud}
     depends_on: { db: { condition: service_healthy } }
     volumes: ["uploads:/data/uploads"]
     networks: [internal, egress]
