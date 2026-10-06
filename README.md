@@ -36,7 +36,7 @@ Login sementara memakai **email + password** (`AUTH_MODE=password`). Isi `SEED_S
 di `.env` lokal; `npm run local` membuat akunnya otomatis. Kredensial tidak pernah ditulis di file repo.
 
 Akun pertama untuk login Google (`AUTH_MODE=google`): `npm run user:create -w @csm/api -- --email ... --name ... --role super_admin`
-(email Gmail otomatis masuk whitelist). Status Fase 0 dan data yang perlu disiapkan: [docs/FASE-0.md](docs/FASE-0.md).
+(email Gmail otomatis masuk whitelist). Status Fase 0 dan data yang perlu disiapkan: [docs/FASE-0.md](docs/FASE-0.md). Panduan quality control: [docs/QC.md](docs/QC.md).
 
 ## Test
 
