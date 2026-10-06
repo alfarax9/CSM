@@ -45,6 +45,10 @@ describe('validators (PRD §4, §6)', () => {
 
   it('satuan PCS tidak ikut menjadi angka 5', () => {
     expect(parseCount('2 - PCS')).toBe('2');
+    expect(parseCount('2pcs')).toBe('2');
+    expect(parseCount('1-POS.')).toBe('1');
+    expect(normalizePhones('0857 7575 5299')).toBe('085775755299');
+    expect(normalizePhones('081931 332153 087896565665')).toBe('081931332153 087896565665');
     expect(normalizeNumeric('2 - PCS')).toBe('25'); // alasan parseCount dibutuhkan
   });
 

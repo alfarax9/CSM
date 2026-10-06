@@ -18,7 +18,8 @@ export function normalizeNumeric(raw: string): string {
 
 /** "2 - PCS" → "2". Satuan dibuang dulu agar S di "PCS" tidak ikut menjadi 5. */
 export function parseCount(raw: string): string {
-  return normalizeNumeric(raw.replace(/\b(PCS|PC|KOLI|KG|KGS)\b/gi, ' '));
+  // Angka pertama; satuan tulisan tangan sering terbaca aneh (DCS, POS, DOG). Tanpa digit: O→0 dst.
+  return raw.match(/\d+/)?.[0] ?? normalizeNumeric(raw);
 }
 
 /** "C-8060823" → "C8060823". */
@@ -32,11 +33,21 @@ export function isValidPassport(value: string): boolean {
 
 /** Beberapa nomor dipisah spasi, seperti di template. Setiap nomor harus lolos pola. */
 export function normalizePhones(raw: string): string {
-  return raw
-    .split(/[\s/,;]+/)
-    .map(normalizeNumeric)
-    .filter((n) => n.length > 0)
-    .join(' ');
+  // Nomor berkelompok ("0857 7575 5299") digabung; kelompok baru = nomor baru hanya jika diawali 0
+  // dan nomor sebelumnya sudah ≥ 10 digit.
+  const numbers: string[] = [];
+  for (const group of raw.split(/[/,;\n]+/)) {
+    let cur = '';
+    for (const chunk of group.split(/\s+/).map(normalizeNumeric)) {
+      if (!chunk) continue;
+      if (cur.length >= 10 && chunk.startsWith('0')) {
+        numbers.push(cur);
+        cur = chunk;
+      } else cur += chunk;
+    }
+    if (cur) numbers.push(cur);
+  }
+  return numbers.join(' ');
 }
 
 export function isValidPhones(value: string): boolean {
