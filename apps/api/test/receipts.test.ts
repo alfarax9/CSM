@@ -125,6 +125,13 @@ describe.skipIf(!HAS_DB)('resi manual', () => {
     expect(res.body.warnings[0]).toContain('Koli di kertas (3)');
   });
 
+  it('HP pengirim nomor Arab Saudi diterima (bukan pola 08)', async () => {
+    const res = await request(app).post(`/api/v1/containers/${c257}/receipts`).set('Cookie', await as('admin'))
+      .send(resi(SERIAL[2]!, { salesId: ids.said, senderPhone: '0560 356 139' }));
+    expect(res.status).toBe(201);
+    expect(res.body.senderPhone).toBe('0560356139');
+  });
+
   it('Validasi: paspor salah pola, serial 3 digit, dan container Locked ditolak', async () => {
     const cookie = await as('admin');
     const bad = await request(app).post(`/api/v1/containers/${c257}/receipts`).set('Cookie', cookie)
