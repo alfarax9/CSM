@@ -8,6 +8,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const me = await getMe();
   const staff = me.role !== 'sales';
   const nav = [
+    { href: '/scan', label: 'Scan resi' },
     { href: '/containers', label: 'Container' },
     ...(staff
       ? [
@@ -29,9 +30,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <LogoutButton />
         </div>
       </header>
-      <nav aria-label="Menu" className="flex gap-1 border-b border-grid bg-surface p-2 md:flex-col md:border-r md:border-b-0">
+      <nav aria-label="Menu" className="flex gap-1 overflow-x-auto border-b border-grid bg-surface p-2 md:flex-col md:overflow-visible md:border-r md:border-b-0">
         {nav.map((n) => (
-          <Link key={n.href} href={n.href} className="rounded-button px-3 py-1.5 text-green-800 hover:bg-green-50">
+          <Link key={n.href} href={n.href} className="whitespace-nowrap rounded-button px-3 py-1.5 text-green-800 hover:bg-green-50">
             {n.label}
           </Link>
         ))}
