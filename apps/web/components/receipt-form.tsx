@@ -26,6 +26,14 @@ interface Props {
   imageToken?: string;
   /** Mode scan beruntun: dipanggil setelah resi baru tersimpan, menggantikan navigasi ke sheet. */
   onCreated?: (r: ReceiptDetail) => void;
+  /** Saran hasil baca foto (VLM); mengisi form dan diberi warna sampai dicek manusia. */
+  suggestions?: Record<string, SuggestedField>;
+}
+
+export interface SuggestedField {
+  value: unknown;
+  level: 'neutral' | 'bad';
+  reason: string | null;
 }
 
 /** Panel merah Serial No ganda (PRD F7): lokasi resi lama. */
@@ -103,9 +111,9 @@ function DestinationInput({ value, onChange, disabled }: { value: { code: string
   );
 }
 
-export function ReceiptForm({ containerId, staff, sales, initial, readOnly = false, imageToken, onCreated }: Props) {
+export function ReceiptForm({ containerId, staff, sales, initial, readOnly = false, imageToken, onCreated, suggestions }: Props) {
   const router = useRouter();
-  const [serial, setSerial] = useState(initial ? String(initial.serialNo) : '');
+  const [serial, setSerial] = useState(initial ? String(initial.serialNo) : suggestions?.serialNo ? String(suggestions.serialNo.value) : '');
   const [dup, setDup] = useState<SerialDuplicate | null>(null);
   const [dest, setDest] = useState(initial?.wilayahCode ? { code: initial.wilayahCode, label: initial.destCity ?? '' } : null);
   const [error, setError] = useState('');
@@ -178,19 +186,54 @@ export function ReceiptForm({ containerId, staff, sales, initial, readOnly = fal
   }
 
   const v = (k: keyof ReceiptDetail) => {
-    const val = initial?.[k];
+    const val = initial ? initial[k] : suggestions?.[k]?.value;
     return val === null || val === undefined ? '' : String(val);
   };
+  /** Warna field hasil mesin (PRD §8): kuning = perlu dicek, merah = gagal validasi. Hilang setelah diubah. */
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const hl = (k: string) => {
+    const s = !initial && !touched.has(k) ? suggestions?.[k] : undefined;
+    return s ? (s.level === 'bad' ? 'bg-bad text-bad-ink' : 'bg-neutral') : '';
+  };
+  const reasonOf = (k: string) => (!initial && !touched.has(k) ? suggestions?.[k]?.reason : null);
+  const touch = (k: string) => () => setTouched((t) => (t.has(k) ? t : new Set(t).add(k)));
+  const suggestedPackages = (suggestions?.packages?.value ?? {}) as Partial<Record<PackageType, number>>;
 
   return (
     <form ref={formRef} onSubmit={submit} className="grid gap-4">
+      {suggestions && !initial && Object.keys(suggestions).length > 0 && (
+        <div className="grid gap-1 rounded-cell border border-grid bg-surface p-3 text-meta">
+          <p>
+            <span className="font-semibold">Terisi otomatis dari foto.</span> Cocokkan setiap field berwarna dengan kertas:{' '}
+            <span className="rounded-cell bg-neutral px-1">kuning</span> = cek, <span className="rounded-cell bg-bad px-1 text-bad-ink">merah</span>{' '}
+            = tidak lolos validasi. Warna hilang setelah field diubah.
+          </p>
+          {Object.keys(suggestions)
+            .filter((k) => reasonOf(k))
+            .map((k) => (
+              <p key={k} className="text-bad-ink">
+                • {reasonOf(k)}
+              </p>
+            ))}
+        </div>
+      )}
       <fieldset disabled={readOnly || busy} className="grid gap-4">
         <section className="grid gap-3 rounded-cell border border-grid bg-surface p-4 sm:grid-cols-3">
           <Field label="Serial No (wajib)">
-            <Input value={serial} onChange={(e) => setSerial(e.target.value.replace(/\D/g, ''))} inputMode="numeric" maxLength={5} required className="num font-semibold" />
+            <Input
+              value={serial}
+              onChange={(e) => {
+                setSerial(e.target.value.replace(/\D/g, ''));
+                touch('serialNo')();
+              }}
+              inputMode="numeric"
+              maxLength={5}
+              required
+              className={`num font-semibold ${hl('serialNo')}`}
+            />
           </Field>
           <Field label="Tanggal resi">
-            <Input name="receiptDate" type="date" defaultValue={v('receiptDate')} />
+            <Input name="receiptDate" type="date" defaultValue={v('receiptDate')} className={hl('receiptDate')} onInput={touch('receiptDate')} />
           </Field>
           {staff ? (
             <Field label="Sales">
@@ -220,30 +263,30 @@ export function ReceiptForm({ containerId, staff, sales, initial, readOnly = fal
         <section className="grid gap-3 rounded-cell border border-grid bg-surface p-4 sm:grid-cols-3">
           <h2 className="text-panel font-semibold sm:col-span-3">Pengirim</h2>
           <Field label="Nama pengirim">
-            <Input name="senderName" defaultValue={v('senderName')} placeholder="HANIPAH BT ADE" />
+            <Input name="senderName" defaultValue={v('senderName')} placeholder="HANIPAH BT ADE" className={hl('senderName')} onInput={touch('senderName')} />
           </Field>
           <Field label="No paspor">
-            <Input name="passportNo" defaultValue={v('passportNo')} placeholder="C8060823" autoComplete="off" />
+            <Input name="passportNo" defaultValue={v('passportNo')} placeholder="C8060823" autoComplete="off" className={hl('passportNo')} onInput={touch('passportNo')} />
           </Field>
           <Field label="No HP pengirim">
-            <Input name="senderPhone" defaultValue={v('senderPhone')} inputMode="tel" autoComplete="off" />
+            <Input name="senderPhone" defaultValue={v('senderPhone')} inputMode="tel" autoComplete="off" className={hl('senderPhone')} onInput={touch('senderPhone')} />
           </Field>
         </section>
 
         <section className="grid gap-3 rounded-cell border border-grid bg-surface p-4 sm:grid-cols-3">
           <h2 className="text-panel font-semibold sm:col-span-3">Penerima</h2>
           <Field label="Nama penerima">
-            <Input name="recipientName" defaultValue={v('recipientName')} />
+            <Input name="recipientName" defaultValue={v('recipientName')} className={hl('recipientName')} onInput={touch('recipientName')} />
           </Field>
           <Field label="No HP penerima (beberapa nomor dipisah spasi)">
-            <Input name="recipientPhone" defaultValue={v('recipientPhone')} inputMode="tel" autoComplete="off" />
+            <Input name="recipientPhone" defaultValue={v('recipientPhone')} inputMode="tel" autoComplete="off" className={hl('recipientPhone')} onInput={touch('recipientPhone')} />
           </Field>
           <Field label="Tujuan (kab/kota)">
             <DestinationInput value={dest} onChange={setDest} disabled={readOnly} />
           </Field>
           <div className="sm:col-span-3">
             <Field label="Alamat lengkap">
-              <Input name="address" defaultValue={v('address')} placeholder="Kp. … Rt.05/06 Ds. … Kec. … Kab. …" />
+              <Input name="address" defaultValue={v('address')} placeholder="Kp. … Rt.05/06 Ds. … Kec. … Kab. …" className={hl('address')} onInput={touch('address')} />
             </Field>
           </div>
         </section>
@@ -253,16 +296,24 @@ export function ReceiptForm({ containerId, staff, sales, initial, readOnly = fal
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
             {PACKAGE_TYPES.map((p: PackageType) => (
               <Field key={p} label={PACKAGE_LABEL[p]}>
-                <Input name={`pkg_${p}`} type="number" min={0} max={999} defaultValue={initial?.packages[p] || ''} className="num" />
+                <Input
+                  name={`pkg_${p}`}
+                  type="number"
+                  min={0}
+                  max={999}
+                  defaultValue={initial?.packages[p] || suggestedPackages[p] || ''}
+                  className={`num ${!initial && suggestedPackages[p] ? hl('packages') : ''}`}
+                  onInput={touch('packages')}
+                />
               </Field>
             ))}
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="Koli / total pcs (di kertas)">
-              <Input name="koliTotal" type="number" min={0} defaultValue={v('koliTotal')} className="num" />
+              <Input name="koliTotal" type="number" min={0} defaultValue={v('koliTotal')} className={`num ${hl('koliTotal')}`} onInput={touch('koliTotal')} />
             </Field>
             <Field label="Berat (Kg)">
-              <Input name="weightKg" type="number" min={0} step="0.01" defaultValue={v('weightKg')} className="num" />
+              <Input name="weightKg" type="number" min={0} step="0.01" defaultValue={v('weightKg')} className={`num ${hl('weightKg')}`} onInput={touch('weightKg')} />
             </Field>
             <div className="col-span-2">
               <Field label="Ket. / Cek (mis. Plus 1 (64627))">
@@ -276,7 +327,7 @@ export function ReceiptForm({ containerId, staff, sales, initial, readOnly = fal
           <h2 className="col-span-full text-panel font-semibold">Biaya (disimpan, tidak diekspor)</h2>
           {(['insurance', 'packing', 'vat', 'grandTotal'] as const).map((k) => (
             <Field key={k} label={{ insurance: 'Insurance', packing: 'Packing', vat: 'VAT', grandTotal: 'Grand total' }[k]}>
-              <Input name={k} type="number" min={0} defaultValue={v(k)} className="num" />
+              <Input name={k} type="number" min={0} defaultValue={v(k)} className={`num ${hl(k)}`} onInput={touch(k)} />
             </Field>
           ))}
         </section>
