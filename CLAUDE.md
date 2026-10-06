@@ -6,7 +6,9 @@ Spesifikasi: docs/PRD-v2.md. Bahasa UI, pesan error, dan komentar kode: Bahasa I
 
 - Data resi asli (foto, PDF, workbook berisi paspor/HP) tidak pernah masuk repo atau diproses tool apa pun
   yang mengirim isi file ke LLM. Simpan di luar repo; `data/` dan `samples/` sudah di-ignore.
-- `HF_TOKEN` hanya untuk services/ml (`ml-worker`). Jangan pernah di env Next.js atau kode browser.
+- Kunci API model (`OPENROUTER_API_KEY`, `HF_TOKEN`) hanya untuk services/ml (`ml` dan `ml-worker`). Jangan pernah
+  di env Next.js, API Node, atau kode browser. Penyedia dipilih lewat `VLM_API`: `openrouter` (Qwen3.7-Flash,
+  server Alibaba Singapura/China) atau `huggingface` (dikunci `HF_PROVIDER`, bawaan `ovhcloud` Eropa).
 
 ## Login (sementara)
 
