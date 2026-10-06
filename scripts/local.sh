@@ -75,7 +75,7 @@ if [ "$WITH_ML" = 1 ]; then
   (cd services/ml && uv sync --quiet)
   NAMES="$NAMES,ml,worker"
   COLORS="$COLORS,magenta,yellow"
-  CMDS+=("uv run --directory services/ml uvicorn csm_ml.api:app --port 8000" "uv run --directory services/ml python -m csm_ml.worker")
+  CMDS+=("uv run --directory services/ml uvicorn csm_ml.api:app --port 8000 --reload --reload-dir src" "uv run --directory services/ml python -m csm_ml.worker")
 fi
 
 step "CSM berjalan → http://localhost:3000  (Ctrl+C untuk berhenti)"
