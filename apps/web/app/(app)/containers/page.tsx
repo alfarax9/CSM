@@ -44,7 +44,7 @@ export default async function ContainersPage() {
               <th className={th}>Tgl loading</th>
               <th className={th}>Status</th>
               <th className={`${th} num`}>{staff ? 'Resi' : 'Resi saya'}</th>
-              {staff && <th className={th}>Aksi</th>}
+              <th className={th}>Aksi</th>
             </tr>
           }
         >
@@ -62,11 +62,19 @@ export default async function ContainersPage() {
                 {c.purgeAt && <span className="ml-2 text-meta text-ink-muted">foto & data pribadi dihapus {fmtDate(c.purgeAt)}</span>}
               </td>
               <td className={`${td} num`}>{fmtNum(c.receipts)}</td>
-              {staff && (
-                <td className={td}>
-                  <StatusActions id={c.id} seqNo={c.seqNo} status={c.status} isSuperAdmin={me.role === 'super_admin'} />
-                </td>
-              )}
+              <td className={td}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(c.status === 'draft' || c.status === 'loading') && (
+                    <Link
+                      href={`/containers/${c.id}/scan`}
+                      className="flex h-8 items-center rounded-button bg-green-600 px-3 font-semibold text-white hover:bg-green-700"
+                    >
+                      Scan resi
+                    </Link>
+                  )}
+                  {staff && <StatusActions id={c.id} seqNo={c.seqNo} status={c.status} isSuperAdmin={me.role === 'super_admin'} />}
+                </div>
+              </td>
             </tr>
           ))}
           <tr className="bg-canvas font-semibold">
@@ -74,7 +82,7 @@ export default async function ContainersPage() {
               Total {containers.length} container
             </td>
             <td className={`${td} num`}>{fmtNum(total)}</td>
-            {staff && <td className={td} />}
+            <td className={td} />
           </tr>
         </Grid>
       )}
